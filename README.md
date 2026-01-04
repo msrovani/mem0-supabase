@@ -12,7 +12,7 @@ Mem0-Supabase is an enterprise-grade memory system that transforms AI agents int
 
 ## 🚀 The 11-Layer Architecture
 
-Mem0 emulates human cognition through 11 hierarchical memory layers:
+Mem0 emulates human cognition through 12 hierarchical memory layers:
 
 1.  **Perceptual**: Sensory processing (Multimodal).
 2.  **Reflexive**: Real-time instinctive reaction.
@@ -25,7 +25,8 @@ Mem0 emulates human cognition through 11 hierarchical memory layers:
 9.  **Procedural**: Skills and instructions.
 10. **Graphic**: Associative relational links.
 11. **Recollection**: Human-like weighted retrieval.
-
+12. **The Ego**: Persona Shyntesis
+    
 ---
 
 ## ⚡ Key Features
@@ -60,7 +61,7 @@ print(results["memories"])
 
 ## 📂 Documentation
 
-- [**Cognitive Blueprint**](./docs/architecture/memory_layers.mdx): Detailed breakdown of the 11 layers.
+- [**Cognitive Blueprint**](./docs/architecture/memory_layers.mdx): Detailed breakdown of the 12 layers.
 - [**Technical Innovations**](./docs/architecture/supabase_innovations.md): Hybrid search, Graph-on-Postgres, and Vault.
 - [**Setup Guide**](./docs/SETUP.md): Comprehensive environment and SQL configuration.
 
