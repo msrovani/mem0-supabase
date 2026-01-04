@@ -6,7 +6,7 @@ This folder contains the documentation for the enterprise-grade Supabase fork of
 
 - `introduction.mdx` - High-impact landing page
 - `SETUP.md` - Technical initialization guide
-- `architecture/` - Deep dive into the 11-layer cognitive model
+- `architecture/` - Deep dive into the 12-layer cognitive model
 - `core-concepts/` - Memory operations (add, recollect, temporal)
 - `open-source/` - Installation and Configuration
 - `components/` - Provider catalogs (LLMs, Embedders)
