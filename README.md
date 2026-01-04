@@ -6,7 +6,7 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Supabase Powered](https://img.shields.io/badge/Supabase-Powered-3ecf8e?logo=supabase)](https://supabase.com)
 
-Mem0-Supabase is an enterprise-grade memory system that transforms AI agents into cognitively aware entities. By leveraging **Graph-on-Postgres**, **Hybrid Search**, and a **Human-Inspired 11-Layer Recall System**, it provides the most sophisticated long-term memory solution in the Supabase ecosystem.
+Mem0-Supabase is an enterprise-grade memory system that transforms AI agents into cognitively aware entities. By leveraging **Graph-on-Postgres**, **Hybrid Search**, and a **Human-Inspired 12-Layer Recall System**, it provides the most sophisticated long-term memory solution in the Supabase ecosystem.
 
 ---
 
