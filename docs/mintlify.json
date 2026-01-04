@@ -1,0 +1,78 @@
+{
+    "name": "Mem0 Supabase Edition",
+    "logo": {
+        "light": "/logo/light.svg",
+        "dark": "/logo/dark.svg"
+    },
+    "favicon": "/favicon.png",
+    "colors": {
+        "primary": "#3ECF8E",
+        "light": "#6EE7B7",
+        "dark": "#065F46",
+        "anchors": {
+            "from": "#3ECF8E",
+            "to": "#059669"
+        }
+    },
+    "topbarLinks": [
+        {
+            "name": "Support",
+            "url": "https://github.com/mem0ai/mem0/issues"
+        }
+    ],
+    "topbarCtaButton": {
+        "name": "GitHub",
+        "url": "https://github.com/mem0ai/mem0"
+    },
+    "anchors": [
+        {
+            "name": "Architecture",
+            "icon": "sitemap",
+            "url": "architecture"
+        },
+        {
+            "name": "Core Concepts",
+            "icon": "brain",
+            "url": "core-concepts"
+        }
+    ],
+    "navigation": [
+        {
+            "group": "Get Started",
+            "pages": [
+                "introduction",
+                "SETUP",
+                "open-source/python-quickstart"
+            ]
+        },
+        {
+            "group": "Architecture & Innovations",
+            "pages": [
+                "architecture/memory_layers",
+                "architecture/supabase_innovations"
+            ]
+        },
+        {
+            "group": "Core Operations",
+            "pages": [
+                "core-concepts/memory-operations"
+            ]
+        },
+        {
+            "group": "Open Source Configuration",
+            "pages": [
+                "open-source/configuration"
+            ]
+        },
+        {
+            "group": "Component Catalog",
+            "pages": [
+                "components/vectordbs/dbs/supabase"
+            ]
+        }
+    ],
+    "footerSocials": {
+        "github": "https://github.com/mem0ai/mem0",
+        "x": "https://x.com/mem0ai"
+    }
+}

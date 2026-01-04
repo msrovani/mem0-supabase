@@ -1,0 +1,30 @@
+---
+title: Overview
+---
+
+Mem0 Supabase Edition supports multiple LLMs for fact extraction and memory updates.
+
+## Usage
+
+To use an LLM, provide a configuration. If no configuration is supplied, **OpenAI** will be used by default.
+
+For configuration parameters, see [Config](./config).
+
+## Supported LLMs
+
+<CardGroup cols={2}>
+  <Card title="OpenAI" href="/components/llms/models/openai">Default. GPT-4o, GPT-4, GPT-3.5</Card>
+</CardGroup>
+
+<Note>
+  For local/self-hosted models, configure via the `llm` config section with Ollama or LiteLLM.
+</Note>
+
+## Structured vs Unstructured Outputs
+
+Mem0 uses OpenAI's structured outputs for reliable JSON extraction:
+
+- **Structured Outputs**: Returns precise JSON objects for memory operations.
+- **Unstructured Outputs**: Free-form text for creative tasks.
+
+Choose the format that suits your use case. Structured outputs are recommended for memory operations.

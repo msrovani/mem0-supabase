@@ -1,0 +1,103 @@
+---
+title: "Memory Operations"
+description: "Master the basic CRUD operations for your cognitive memories."
+icon: "database"
+---
+
+# Core Operations
+
+Mem0 Supabase Edition provides a simple API for managing complex cognitive states. All operations are tenant-aware and security-first.
+
+## ➕ Adding Memories (Surprise-Driven)
+
+When you add a memory, Mem0 performs a "Cognitive Metabolism" check:
+1.  **Expected Info**: If the fact is already known, it increments the `reinforcement_count` of the existing memory instead of creating noise.
+2.  **Surprising Info**: If the fact is novel, it is encoded and potentially tagged as a `is_flashbulb` memory.
+
+```python
+from mem0 import Memory
+
+m = Memory()
+
+# This new fact will be encoded as a 'Flashbulb' memory
+m.add("I'm planning a trip to Lisbon next month.", user_id="alex")
+
+# If you repeat similar info, Mem0 just reinforces the existing entry
+m.add("Don't forget my Lisbon trip!", user_id="alex") 
+```
+
+## 🔍 Searching & Recollecting
+
+There are two ways to retrieve memories: standard **Search** and the advanced **Recollection Engine**.
+
+### Standard Search & Resonance
+Best for simple semantic retrieval. Results automatically include the **Subconscious Context** (real-time resonance) and the **Persona Identity** (Layer 12) if enabled.
+
+```python
+results = m.search("What have I learned today?", filters={"user_id": "alex"})
+
+# Access direct results
+for mem in results["results"]:
+    print(mem["memory"])
+
+# Real-time awareness from other agents
+resonance = results.get("subconscious_context", [])
+
+# The agent's persistent meta-identity (The Ego)
+persona = results.get("persona_identity")
+```
+
+### Advanced Recollection
+The **11th Layer** of our architecture. It balances similarity, importance, and recency. Like search, it also passes through the **Persona Identity**.
+
+```python
+# The Recollection Engine unifies all cognitive signals
+recalled = m.recollection.recollect("core values", limit=5)
+
+# Current distilled personality (The Ego)
+current_ego = recalled.get("persona_identity")
+```
+
+### Identity Synthesis (Layer 12) 🎭
+You can trigger the agent to reflect on its own identity and evolve its persona based on its memory history.
+
+```python
+# Distills current behavioral traits into 'identity' memory
+# Requires enable_ego=True in MemoryConfig
+persona = m.synthesize_identity(user_id="alex")
+print(f"Synthesized Persona: {persona}")
+```
+
+## 🕰️ Time-Travel (Temporal Memory)
+
+Query your memories as they existed at a specific point in time.
+
+```python
+from mem0.temporal import TemporalMemory
+from datetime import datetime, timedelta
+
+tm = TemporalMemory()
+
+# What did I know two weeks ago?
+state = tm.get_memories_at("alex", days_ago=14)
+```
+
+## 🕸️ Graph Jumps
+
+If you have enabled Graphic Memory, connections between entities are created automatically.
+
+```python
+# The Recollection Engine can also jump to related concepts
+recalled = m.recollection.recollect("Lisbon", enable_graph_jump=True)
+print(recalled["associations"]) # Shows things related to Lisbon (Portugal, Past Trips, etc.)
+```
+
+## 🧹 Deleting & Resetting
+
+```python
+# Delete a specific memory
+m.delete("memory_uuid")
+
+# Reset everything for a user (Careful!)
+m.reset(user_id="alex")
+```

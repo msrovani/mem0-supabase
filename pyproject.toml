@@ -1,0 +1,85 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mem0ai"
+version = "1.0.1"
+description = "Long-term memory for AI Agents (Supabase Edition)"
+authors = [
+    { name = "Mem0", email = "founders@mem0.ai" }
+]
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.9,<4.0"
+dependencies = [
+    "pydantic>=2.7.3",
+    "openai>=1.90.0",
+    "posthog>=3.5.0",
+    "pytz>=2024.1",
+    "sqlalchemy>=2.0.31",
+    "vecs>=0.4.0",
+]
+
+[project.optional-dependencies]
+graph = []
+# Only keeping Supabase/Postgres related
+vector_stores = [
+    "vecs>=0.4.0",
+    "psycopg>=3.2.8",
+    "psycopg-pool>=3.2.6,<4.0.0",
+]
+llms = [
+    "openai>=1.90.0",
+]
+extras = [
+    "fastembed>=0.3.1",
+]
+test = [
+    "pytest>=8.2.2",
+    "pytest-mock>=3.14.0",
+    "pytest-asyncio>=0.23.7",
+]
+dev = [
+    "ruff>=0.6.5",
+    "isort>=5.13.2",
+    "pytest>=8.2.2",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.hatch.build]
+include = [
+    "mem0/**/*.py",
+]
+exclude = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["mem0"]
+only-include = ["mem0"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"README.md" = "README.md"
+
+[tool.hatch.envs.default.scripts]
+format = [
+    "ruff format",
+]
+format-check = [
+    "ruff format --check",
+]
+lint = [
+    "ruff check",
+]
+lint-fix = [
+    "ruff check --fix",
+]
+test = [
+    "pytest tests/ {args}",
+]
+
+[tool.ruff]
+line-length = 120
+exclude = []

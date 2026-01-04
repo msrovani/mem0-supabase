@@ -1,0 +1,36 @@
+---
+title: Overview
+---
+
+Mem0 Supabase Edition uses **Supabase** as the exclusive vector database, providing a fully integrated PostgreSQL-based solution with `pgvector`.
+
+## Supported Vector Database
+
+<CardGroup cols={1}>
+  <Card title="Supabase" href="/components/vectordbs/dbs/supabase">PostgreSQL + pgvector with Hybrid Search, Graph, and RLS</Card>
+</CardGroup>
+
+## Why Supabase Only?
+
+This edition is optimized for:
+- **Zero External Dependencies**: No need for Qdrant, Pinecone, or other vector DB services.
+- **Hybrid Search**: Combines vector similarity with keyword search using RRF.
+- **Graph-on-Postgres**: Knowledge graph without Neo4j.
+- **Row Level Security**: Native Supabase RLS for multi-tenant applications.
+- **Serverless Ready**: Works in Edge Functions and Lambda environments.
+
+## Usage
+
+Set your connection string in the environment:
+
+```bash
+export SUPABASE_CONNECTION_STRING="postgresql://postgres:password@host:5432/postgres"
+```
+
+For configuration details, see [Supabase Config](/components/vectordbs/dbs/supabase).
+
+## Common issues
+
+### Using Model with Different Dimensions
+
+If you are using a customized model with different dimensions other than 1536 (for example, 768), add `"embedding_model_dims": 768` to the config of the vector_store.

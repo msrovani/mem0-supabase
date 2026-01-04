@@ -1,0 +1,90 @@
+---
+title: "Configure the Memory Stack"
+description: "Wire up Mem0 Supabase Edition with your preferred LLM and organizational settings."
+icon: "sliders"
+---
+
+# Configuration Guide
+
+Mem0 Supabase Edition is designed to be "Zero-Config" by default, using environment variables for the primary cognitive stack. This document explains how to customize these settings for advanced production use cases.
+
+<Info>
+  **The Supabase Priority**
+  This edition is optimized for the **Supabase-Native Stack** (PostgreSQL + pgvector + RLS + Vault). While other providers are supported for the LLM and Embedder, the vector store and history manager are pre-configured to utilize your Supabase infrastructure.
+</Info>
+
+## Core Connection Settings
+
+All cognitive layers (Lifecycle, Enterprise, Temporal) rely on a single source of truth for database access.
+
+| Variable | Requirement | Description |
+|----------|-------------|-------------|
+| `SUPABASE_CONNECTION_STRING` | **Mandatory** | The direct Postgres URI (e.g., `postgresql://postgres:[PW]@[HOST]:5432/postgres`). |
+| `SUPABASE_URL` | **Required** | Your project URL, used for Multimodal Storage and Edge Functions. |
+| `SUPABASE_KEY` | **Required** | Your Service Role Key (used for administrative tasks and RLS bypass). |
+
+## Python Initialization
+
+### Implicit Configuration
+The easiest way to initialize Mem0 is to let it pull from your environment.
+
+```python
+from mem0 import Memory
+
+# Automatically connects to Supabase and uses text-embedding-3-small
+memory = Memory()
+```
+
+### Advanced Explicit Configuration
+If you need to move beyond defaults (e.g., using a custom table name or a different LLM), use a configuration dictionary.
+
+```python
+config = {
+    "vector_store": {
+        "provider": "supabase",
+        "config": {
+            "connection_string": "your_connection_string",
+            "collection_name": "enterprise_memories", # Custom table name
+        },
+    },
+    "llm": {
+        "provider": "openai",
+        "config": {"model": "gpt-4o", "temperature": 0.1},
+    },
+    "embedder": {
+        "provider": "openai",
+        "config": {"model": "text-embedding-3-large", "embedding_dims": 3072},
+    },
+    "graph_store": {
+        "provider": "supabase",
+        "config": {"connection_string": "your_connection_string"},
+    },
+    "enable_resonance": True # Activate Real-time Synaptic resonance
+}
+
+memory = Memory.from_config(config)
+```
+
+## Professional Tuning
+
+<AccordionGroup>
+  <Accordion title="Multi-Tenancy (collection_name)">
+    In production, use the `collection_name` parameter to isolate different applications or large user groups into separate Supabase tables. The `setup_wizard.py` creates `memories` by default.
+  </Accordion>
+  <Accordion title="Extraction Precision">
+    Set `temperature` to `0.0` or `0.1` in the LLM config. This ensures that fact extraction remains deterministic and doesn't hallucinate "fake" memories from your conversation logs.
+  </Accordion>
+  <Accordion title="Memory Types">
+    You can categorize memories into `episodic`, `semantic`, and `procedural`. This is handled via the `metadata` filter but can be steered by providing clear instructions in the `messages` array during the `add()` call.
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+  **Security Note**: Never expose your `SUPABASE_CONNECTION_STRING` or `SUPABASE_KEY` in client-side code. Always wrap Mem0 calls in a secure backend environment or a Supabase Edge Function.
+</Warning>
+
+## Troubleshooting
+
+- **Connection Pool Exhaustion**: Use the **Session Pooler** PORT (`5432`) for long-running scripts and the **Transaction Pooler** PORT (`6543`) for serverless functions.
+- **Dimension Mismatch**: If you change your `embedder`, you MUST also update your `match_memories_hybrid` function in Supabase to match the new vector size (e.g., 3072 for `text-embedding-3-large`).
+- **RLS Issues**: Ensure your `metadata->>'user_id'` matches the `auth.uid()` of the requesting user if you are not using the `service_role` key.
