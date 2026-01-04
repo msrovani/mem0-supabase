@@ -10,7 +10,7 @@ Mem0-Supabase is an enterprise-grade memory system that transforms AI agents int
 
 ---
 
-## 🚀 The 11-Layer Architecture
+## 🚀 The 12-Layer Architecture
 
 Mem0 emulates human cognition through 12 hierarchical memory layers:
 
