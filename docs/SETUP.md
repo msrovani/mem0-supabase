@@ -1,6 +1,6 @@
 # Mem0: Supabase Edition - Setup Guide
 
-This guide ensures your Supabase project is properly configured to support the 12-layer cognitive memory architecture.
+This guide ensures your Supabase project is properly configured to support the 11-layer cognitive memory architecture.
 
 ## 1. Environment Variables 🔑
 
@@ -59,4 +59,3 @@ m = Memory.from_config(config)
 - **PGVector Error**: Ensure the `vector` extension is enabled.
 - **Permission Denied**: Check if your `SUPABASE_CONNECTION_STRING` uses the `postgres` user.
 - **MCP Connection**: Ensure `python -m mem0.mcp_server` runs without errors before adding to Claude Desktop.
-

@@ -49,7 +49,17 @@ This document details the advanced architectural patterns implemented to transfo
     - **Recency** (20%)
 - **Associative Jumps**: If a concept is recalled, the engine can "jump" to related nodes in the Graph Memory.
 
-## 6. Subconscious Synaptic Resonance (SSR)
+## 6. Unified Interaction Model (Smart Pipe)
+**Goal**: Simplify the developer experience by orchestrating all layers through a single entry point.
+
+- **Implementation**: `Memory.process_interaction`
+- **Mechanism**: A single method call triggers:
+    1.  **Recall**: Semantic + Graph + Ego retrieval.
+    2.  **History**: Auto-fetch recent conversation context.
+    3.  **Metabolism**: Trigger ingestion/storage of the new input.
+- **Result**: Drastically reduces boilerplate code for Chatbot/Agent implementations.
+
+## 7. Subconscious Synaptic Resonance (SSR)
 **Goal**: Transform Mem0 from a passive storage system into an active cognitive processor.
 
 ### Phase 1: Surprise-Driven Selective Encoding
