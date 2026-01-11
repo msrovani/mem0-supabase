@@ -42,7 +42,8 @@ class RecollectionEngine:
         """
         self.logger.info(f"Synchronous recollection initiated for query: '{query}'")
         search_results = self.memory.search(query, filters=filters, limit=limit * 2)
-        final_response = self._process_results(search_results.get("results", []), limit, enable_graph_jump)
+        initial_relations = search_results.get("relations", [])
+        final_response = self._process_results(search_results.get("results", []), limit, enable_graph_jump, initial_relations)
         
         # Pass through SSR and Layer 12 context
         if "subconscious_context" in search_results:
@@ -64,7 +65,8 @@ class RecollectionEngine:
         """
         self.logger.info(f"Asynchronous recollection initiated for query: '{query}'")
         search_results = await self.memory.search(query, filters=filters, limit=limit * 2)
-        final_response = self._process_results(search_results.get("results", []), limit, enable_graph_jump)
+        initial_relations = search_results.get("relations", [])
+        final_response = self._process_results(search_results.get("results", []), limit, enable_graph_jump, initial_relations)
 
         # Pass through SSR and Layer 12 context
         if "subconscious_context" in search_results:
@@ -78,7 +80,10 @@ class RecollectionEngine:
         self, 
         results: List[Dict[str, Any]], 
         limit: int, 
-        enable_graph_jump: bool
+        results: List[Dict[str, Any]], 
+        limit: int, 
+        enable_graph_jump: bool,
+        initial_relations: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         Internal logic for weighted ranking and associative jumps.
@@ -129,11 +134,51 @@ class RecollectionEngine:
         
         # 3. Associative Graph Jump
         associations = []
+        if initial_relations:
+            associations.extend(initial_relations)
+
         if enable_graph_jump and getattr(self.memory, 'enable_graph', False) and final_memories:
             self.logger.debug("Executing associative graph jumps for the recalled entities")
-            # Logic for retrieving related nodes from the graph store would go here.
-            # Currently returns an empty list if graph logic is pending final wiring.
-            pass
+            
+            # Perform graph jump on the top 2 memories to expand context
+            for mem in final_memories[:2]:
+                try:
+                    mem_content = mem.get("memory", "")
+                    if mem_content:
+                        search_queries = [mem_content]
+                        
+                        # Optimization: Extract entities from memory content if LLM is available
+                        # This improves graph search quality significantly over raw text search
+                        if hasattr(self.memory, 'llm') and self.memory.llm:
+                            try:
+                                extraction_prompt = f"Extract the key entities (nouns, proper nouns, concepts) from this text. Return only the entities comma separated.\nText: {mem_content}"
+                                entities_text = self.memory.llm.generate_response(
+                                    messages=[{"role": "user", "content": extraction_prompt}]
+                                )
+                                if entities_text:
+                                    # Split by comma and clean up
+                                    entities = [e.strip() for e in entities_text.split(',') if e.strip()]
+                                    if entities:
+                                        search_queries = entities[:3] # Limit to top 3 entities to avoid explosion
+                                        self.logger.debug(f"extracted entities for graph jump: {search_queries}")
+                            except Exception as e:
+                                self.logger.warning(f"Failed to extract entities for graph jump: {e}")
+
+                        # Search graph for concepts/entities
+                        for query in search_queries:
+                            related = self.memory.graph.search(query)
+                            if related:
+                                associations.extend(related)
+                except Exception as e:
+                    self.logger.warning(f"Associative jump failed for memory {mem.get('id')}: {e}")
+
+        # Deduplicate associations based on (source, relation, target)
+        unique_assoc = {}
+        for assoc in associations:
+            key = (assoc.get("source"), assoc.get("relation"), assoc.get("target"))
+            if key not in unique_assoc:
+                unique_assoc[key] = assoc
+        associations = list(unique_assoc.values())
 
         self.logger.info(f"Recalled {len(final_memories)} memories with human-like weighting")
         return {

@@ -1,12 +1,17 @@
 import hashlib
 import re
+import logging
+from copy import deepcopy
+from typing import Any, Dict, Optional
 
 from mem0.configs.prompts import (
     FACT_RETRIEVAL_PROMPT,
     USER_MEMORY_EXTRACTION_PROMPT,
     AGENT_MEMORY_EXTRACTION_PROMPT,
 )
+from mem0.exceptions import ValidationError as Mem0ValidationError
 
+logger = logging.getLogger(__name__)
 
 def get_fact_retrieval_messages(message, is_agent_memory=False):
     """Get fact retrieval messages based on the memory type.
@@ -211,3 +216,133 @@ def sanitize_relationship_for_cypher(relationship) -> str:
 
     return re.sub(r"_+", "_", sanitized).strip("_")
 
+def build_filters_and_metadata(
+    user_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
+    run_id: Optional[str] = None,
+    actor_id: Optional[str] = None,
+    org_id: Optional[str] = None,
+    team_id: Optional[str] = None,
+    visibility: Optional[str] = None,
+    input_metadata: Optional[Dict[str, Any]] = None,
+    input_filters: Optional[Dict[str, Any]] = None,
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    """
+    Constructs metadata for storage and filters for querying based on session and actor identifiers.
+
+    This helper supports multiple session identifiers (`user_id`, `agent_id`, and/or `run_id`)
+    for flexible session scoping and optionally narrows queries to a specific `actor_id`. It returns two dicts:
+
+    1. `base_metadata_template`: Used as a template for metadata when storing new memories.
+       It includes all provided session identifier(s) and any `input_metadata`.
+    2. `effective_query_filters`: Used for querying existing memories. It includes all
+       provided session identifier(s), any `input_filters`, and a resolved actor
+       identifier for targeted filtering if specified by any actor-related inputs.
+
+    Actor filtering precedence: explicit `actor_id` arg → `filters["actor_id"]`
+    This resolved actor ID is used for querying but is not added to `base_metadata_template`,
+    as the actor for storage is typically derived from message content at a later stage.
+
+    Args:
+        user_id (Optional[str]): User identifier, for session scoping.
+        agent_id (Optional[str]): Agent identifier, for session scoping.
+        run_id (Optional[str]): Run identifier, for session scoping.
+        actor_id (Optional[str]): Explicit actor identifier, used as a potential source for
+            actor-specific filtering. See actor resolution precedence in the main description.
+        org_id (Optional[str]): Organization identifier, for enterprise scoping.
+        team_id (Optional[str]): Team identifier, for enterprise scoping.
+        visibility (Optional[str]): Visibility level (private, team, org).
+        input_metadata (Optional[Dict[str, Any]]): Base dictionary to be augmented with
+            session identifiers for the storage metadata template. Defaults to an empty dict.
+        input_filters (Optional[Dict[str, Any]]): Base dictionary to be augmented with
+            session and actor identifiers for query filters. Defaults to an empty dict.
+
+    Returns:
+        tuple[Dict[str, Any], Dict[str, Any]]: A tuple containing:
+            - base_metadata_template (Dict[str, Any]): Metadata template for storing memories,
+              scoped to the provided session(s).
+            - effective_query_filters (Dict[str, Any]): Filters for querying memories,
+              scoped to the provided session(s) and potentially a resolved actor.
+    """
+
+    base_metadata_template = deepcopy(input_metadata) if input_metadata else {}
+    effective_query_filters = deepcopy(input_filters) if input_filters else {}
+
+    # ---------- add all provided session ids ----------
+    session_ids_provided = []
+
+    if user_id:
+        base_metadata_template["user_id"] = user_id
+        effective_query_filters["user_id"] = user_id
+        session_ids_provided.append("user_id")
+
+    if agent_id:
+        base_metadata_template["agent_id"] = agent_id
+        effective_query_filters["agent_id"] = agent_id
+        session_ids_provided.append("agent_id")
+
+    if run_id:
+        base_metadata_template["run_id"] = run_id
+        effective_query_filters["run_id"] = run_id
+        session_ids_provided.append("run_id")
+
+    # ---------- add enterprise identifiers ----------
+    if org_id:
+        base_metadata_template["org_id"] = org_id
+        effective_query_filters["org_id"] = org_id
+    if team_id:
+        base_metadata_template["team_id"] = team_id
+        effective_query_filters["team_id"] = team_id
+    if visibility:
+        base_metadata_template["visibility"] = visibility
+        effective_query_filters["visibility"] = visibility
+
+    if not session_ids_provided:
+        raise Mem0ValidationError(
+            message="At least one of 'user_id', 'agent_id', or 'run_id' must be provided.",
+            error_code="VALIDATION_001",
+            details={"provided_ids": {"user_id": user_id, "agent_id": agent_id, "run_id": run_id}},
+            suggestion="Please provide at least one identifier to scope the memory operation."
+        )
+
+    # ---------- optional actor filter ----------
+    resolved_actor_id = actor_id or effective_query_filters.get("actor_id")
+    if resolved_actor_id:
+        effective_query_filters["actor_id"] = resolved_actor_id
+
+    return base_metadata_template, effective_query_filters
+
+
+def safe_deepcopy_config(config):
+    """Safely deepcopy config, falling back to JSON serialization for non-serializable objects."""
+    try:
+        return deepcopy(config)
+    except Exception as e:
+        logger.debug(f"Deepcopy failed, using JSON serialization: {e}")
+        
+        config_class = type(config)
+        
+        if hasattr(config, "model_dump"):
+            try:
+                clone_dict = config.model_dump(mode="json")
+            except Exception:
+                clone_dict = {k: v for k, v in config.__dict__.items()}
+        elif hasattr(config, "__dataclass_fields__"):
+            from dataclasses import asdict
+            clone_dict = asdict(config)
+        else:
+            clone_dict = {k: v for k, v in config.__dict__.items()}
+        
+        sensitive_tokens = ("auth", "credential", "password", "token", "secret", "key", "connection_class")
+        for field_name in list(clone_dict.keys()):
+            if any(token in field_name.lower() for token in sensitive_tokens):
+                clone_dict[field_name] = None
+        
+        try:
+            return config_class(**clone_dict)
+        except Exception as reconstruction_error:
+            logger.warning(
+                f"Failed to reconstruct config: {reconstruction_error}. "
+                f"Telemetry may be affected."
+            )
+            raise
