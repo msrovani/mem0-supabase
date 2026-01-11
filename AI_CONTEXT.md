@@ -18,7 +18,7 @@ This is a **Meta-Cognitive Bridge** for Agentic LLMs. It defines how to manage t
 | **5** | **Lifecycle** | **Forgetting Curve** (Durability). | `lifecycle.py` |
 | **6** | **Consolidation** | **Autonomous Dreaming** (Clustering). | `find_memory_clusters` |
 | **7** | **Nexus** | Sharing Tiers (Enterprise Visibility). | `enterprise.py` |
-| **8** | **Semantic** | World Facts & Knowledge. | `main.py` |
+| **8** | **Semantic** | World Facts & Knowledge. | `sync_memory.py` |
 | **9** | **Procedural** | Instructions, Skills, & Protocols. | `memory_type='procedural'` |
 | **10** | **Graphic** | Associative Links (Entities/Relations). | `graph_stores/supabase.py` |
 | **11** | **Recollection** | Unified Weighted Recall Engine. | `recollection.py` |

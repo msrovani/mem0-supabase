@@ -1,6 +1,6 @@
 # 🧠 Mem0: Supabase Edition
 
-> **The 11-Layer Cognitive Memory Architecture for AI Agents, hyper-optimized for Supabase.**
+> **The 12-Layer Cognitive Memory Architecture for AI Agents, hyper-optimized for Supabase.**
 
 [![GitHub](https://img.shields.io/github/license/mem0ai/mem0)](https://github.com/mem0ai/mem0)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
@@ -25,13 +25,13 @@ Mem0 emulates human cognition through 12 hierarchical memory layers:
 9.  **Procedural**: Skills and instructions.
 10. **Graphic**: Associative relational links.
 11. **Recollection**: Human-like weighted retrieval.
-12. **The Ego**: Persona Shyntesis
-    
+12. **The Ego**: Meta-cognitive Identity Synthesis.
+
 ---
 
 ## ⚡ Key Features
 
-- **⚓ Universal Recall**: Human-like recordation via Weighted Ranking.
+- **⚓ Universal Recall**: Human-like recordation via Weighted Ranking (Similarity + Importance + Recency + Graph Associations).
 - **🛠️ Universal AI Access (MCP)**: Native support for Claude Desktop, Cursor, and IDEs.
 - **🕰️ Temporal Memory**: Direct time-travel queries (Recall what you knew 7 days ago).
 - **🕸️ Graph-on-Postgres**: Massive relational knowledge without Neo4j.
@@ -50,18 +50,25 @@ python scripts/setup_wizard.py
 ```python
 from mem0 import Memory
 
-# 1. Add Memory
+# 1. Initialize Memory
 m = Memory()
-m.add("I love Supabase and sustainable architecture", user_id="user_123")
 
-# 2. Human-like Recollection
-results = m.recollect("What are my core interests?", user_id="user_123")
-print(results["memories"])
+# 2. Smart Pipe Interaction (Unified Capture & Recall)
+# This single call retrieves context (memories + graph + history) AND learns from the input.
+context = m.process_interaction(
+    "How does my interest in architecture relate to my work?", 
+    user_id="user_123"
+)
+
+# 3. Use the Context
+print(f"Persona: {context['persona']}")
+print(f"Related Memories: {len(context['memories'])}")
+print(f"Knowledge Graph Links: {len(context['associations'])}")
 ```
 
 ## 📂 Documentation
 
-- [**Cognitive Blueprint**](./docs/architecture/memory_layers.mdx): Detailed breakdown of the 12 layers.
+- [**Cognitive Blueprint**](./docs/architecture/memory_layers.mdx): Detailed breakdown of the 11 layers.
 - [**Technical Innovations**](./docs/architecture/supabase_innovations.md): Hybrid search, Graph-on-Postgres, and Vault.
 - [**Setup Guide**](./docs/SETUP.md): Comprehensive environment and SQL configuration.
 
