@@ -1,0 +1,172 @@
+---
+title: "HOWTO de Uso e Integração"
+description: "Guia prático para usar o mem0-supabase em outros projetos, conectores e stack tecnológico."
+icon: "wrench"
+---
+
+# HOWTO de Uso do Mem0-Supabase
+
+Este guia mostra como integrar o **mem0-supabase** em outro projeto, quais conectores existem, como é a stack tecnológica e exemplos reais de uso.
+
+## 1. Instalação Rápida
+
+```bash
+pip install mem0ai
+```
+
+## 2. Variáveis de Ambiente (Supabase)
+
+```bash
+export SUPABASE_CONNECTION_STRING="postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres"
+export SUPABASE_URL="https://[PROJECT].supabase.co"
+export SUPABASE_KEY="service-role-key"
+export OPENAI_API_KEY="sk-..."
+```
+
+## 3. Uso Básico (Sync)
+
+```python
+from mem0 import Memory
+
+m = Memory()
+m.add("Sou arquiteto de IA e gosto de Rust.", user_id="leo")
+results = m.search("linguagem favorita", filters={"user_id": "leo"})
+print(results["results"])
+```
+
+## 4. Uso Assíncrono (Async)
+
+```python
+import asyncio
+from mem0 import AsyncMemory
+
+async def main():
+    m = AsyncMemory()
+    await m.add("Meu time usa Supabase.", user_id="leo")
+    res = await m.search("supabase", user_id="leo")
+    print(res["results"])
+
+asyncio.run(main())
+```
+
+## 5. Integração em Outro Projeto
+
+### Exemplo: API FastAPI com Memória
+
+```python
+from fastapi import FastAPI
+from mem0 import Memory
+
+app = FastAPI()
+m = Memory()
+
+@app.post("/chat")
+def chat(payload: dict):
+    user_id = payload["user_id"]
+    message = payload["message"]
+    context = m.process_interaction(message, user_id=user_id)
+    return {"context": context}
+```
+
+### Exemplo: Worker de Background
+
+```python
+from mem0 import Memory
+
+m = Memory()
+
+def background_job(user_id: str, msg: str):
+    m.add(msg, user_id=user_id)
+    recall = m.recollect("prioridades do projeto", filters={"user_id": user_id})
+    return recall
+```
+
+## 6. Conectores e Stack Tecnológico
+
+### Conectores
+- **LLMs**: OpenAI, Azure OpenAI, Ollama e compatíveis (via config).
+- **Embedders**: OpenAI, FastEmbed, HuggingFace, Vertex.
+- **Vector Store**: Supabase (pgvector + RRF + HNSW).
+- **Graph Store**: Supabase Graph-on-Postgres.
+- **MCP**: Conexão direta com Claude Desktop, Cursor e IDEs.
+
+### Stack Base
+- **Python 3.9+**
+- **Supabase (Postgres + pgvector + RLS + Realtime)**
+- **FastAPI (opcional)** para REST API ([server/README.md](file:///c:/Users/bm2311640/Documents/trae_projects/mem0-supabase/mem0-supabase-main/server/README.md))
+
+## 7. Usabilidade e Fluxos Cognitivos
+
+### Dreaming (Memórias Sintéticas)
+```python
+from mem0.configs.base import MemoryConfig
+from mem0 import Memory
+
+config = MemoryConfig(enable_dreaming=True, dreaming_interval=10)
+m = Memory(config=config)
+```
+
+### Tool-State Memory
+```python
+m.save_tool_state("browser", {"url": "https://supabase.com"}, user_id="leo")
+state = m.get_tool_state("browser", user_id="leo")
+```
+
+### Memory Bridge Multi-Agente
+```python
+m.share_memory("mem_123", target_agent_ids=["finance_agent"])
+```
+
+### Paging + Compaction + Heartbeats
+```python
+config = MemoryConfig(
+    enable_paging=True,
+    enable_compaction=True,
+    enable_heartbeat=True
+)
+m = Memory(config=config)
+recalled = m.recollect("status do projeto", filters={"user_id": "leo"})
+```
+
+## 8. Respostas de Uso (Formato Esperado)
+
+### Search
+```json
+{
+  "results": [
+    {
+      "id": "mem_123abc",
+      "memory": "Sou arquiteto de IA e gosto de Rust.",
+      "user_id": "leo",
+      "created_at": "2026-02-25T17:23:41.638Z",
+      "score": 0.89
+    }
+  ]
+}
+```
+
+### Recollect (com Paging e Heartbeat)
+```json
+{
+  "memories": [
+    {
+      "id": "mem_456def",
+      "memory": "Projeto usa Supabase + pgvector",
+      "score": 0.92
+    }
+  ],
+  "background_context": "Resumo de contexto antigo...",
+  "compacted_principles": [
+    "Prioriza performance e latência baixa",
+    "Prefere Supabase para escalabilidade"
+  ],
+  "proactive_heartbeat": "Lembrar de revisar o pipeline de embeddings amanhã."
+}
+```
+
+## 9. Onde Continuar
+
+- [Memory Operations](file:///c:/Users/bm2311640/Documents/trae_projects/mem0-supabase/mem0-supabase-main/docs/core-concepts/memory-operations.mdx)
+- [Configuração Avançada](file:///c:/Users/bm2311640/Documents/trae_projects/mem0-supabase/mem0-supabase-main/docs/open-source/configuration.mdx)
+- [Arquitetura Cognitiva](file:///c:/Users/bm2311640/Documents/trae_projects/mem0-supabase/mem0-supabase-main/docs/architecture/memory_layers.mdx)
+- [Supabase Innovations](file:///c:/Users/bm2311640/Documents/trae_projects/mem0-supabase/mem0-supabase-main/docs/architecture/supabase_innovations.md)

@@ -1,0 +1,22 @@
+---
+title: Overview
+---
+
+Mem0 Supabase Edition supports the following embedding models for vector generation.
+
+## Supported Embedders
+
+<Note>
+  This edition focuses on **OpenAI** and **Ollama** embedders for simplicity and production-readiness.
+</Note>
+
+<CardGroup cols={2}>
+  <Card title="OpenAI" href="/components/embedders/models/openai">Default embedder using `text-embedding-3-small`</Card>
+  <Card title="Ollama" href="/components/embedders/models/ollama">Self-hosted embeddings for privacy</Card>
+</CardGroup>
+
+## Usage
+
+To utilize an embedding model, you must provide a configuration to customize its usage. If no configuration is supplied, a default configuration will be applied, and `OpenAI` will be used as the embedding model.
+
+For a comprehensive list of available parameters for embedding model configuration, please refer to [Config](./config).
