@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 
+
 class GraphStoreConfig(BaseModel):
     provider: str = Field(
         description="Provider of the graph store (e.g. 'supabase')",

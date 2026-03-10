@@ -99,12 +99,14 @@ def get_image_description(image_obj, llm, vision_details):
     # Placeholder implementation
     return "Image description placeholder"
 
+
 def parse_vision_messages(messages):
     """
     Parse messages containing vision content.
     """
     # Placeholder implementation
     return messages
+
 
 def process_telemetry_filters(filters: Dict[str, Any]) -> Tuple[List[str], List[str]]:
     """
@@ -116,6 +118,7 @@ def process_telemetry_filters(filters: Dict[str, Any]) -> Tuple[List[str], List[
     # simplistic implementation - in real world might hash values
     encoded_ids = [str(filters[k]) for k in keys]
     return keys, encoded_ids
+
 
 def build_filters_and_metadata(
     user_id: Optional[str] = None,
@@ -150,6 +153,7 @@ def build_filters_and_metadata(
 
     return final_metadata, final_filters
 
+
 def _safe_deepcopy_config(config):
     """
     Safely copies a configuration object.
@@ -157,6 +161,7 @@ def _safe_deepcopy_config(config):
     if hasattr(config, "model_copy"):
         return config.model_copy(deep=True)
     return deepcopy(config)
+
 
 def select_fields(records, fields: Optional[List[str]] = None):
     if not fields:

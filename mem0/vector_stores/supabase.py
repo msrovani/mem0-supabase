@@ -33,6 +33,10 @@ class Supabase(VectorStoreBase):
         index_measure: IndexMeasure = IndexMeasure.COSINE,
         use_halfvec: bool = False,
         index_in_memory: bool = False,
+        hybrid_search: bool = True,
+        full_text_weight: float = 1.0,
+        semantic_weight: float = 1.0,
+        rrf_k: int = 60,
     ):
         """
         Initialize the Supabase vector store using vecs and sqlalchemy.
@@ -46,6 +50,10 @@ class Supabase(VectorStoreBase):
         self.index_measure = index_measure
         self.use_halfvec = use_halfvec
         self.index_in_memory = index_in_memory
+        self.hybrid_search = hybrid_search
+        self.full_text_weight = full_text_weight
+        self.semantic_weight = semantic_weight
+        self.rrf_k = rrf_k
 
         if self.use_halfvec:
             logger.info("HALFVEC (float16) optimization enabled. Ensure pgvector 0.7.0+ is installed in Supabase.")
@@ -127,20 +135,20 @@ class Supabase(VectorStoreBase):
                     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                     # Note: this is a simplified version. vecs creates a specific schema and table structure.
                     # For now, we'll log it and proceed with standard vectors, as vecs is the primary interface.
-                    logger.warning("HALFVEC requested. Standard vectors will be used via 'vecs' until native support is confirmed.")
+                    logger.warning(
+                        "HALFVEC requested. Standard vectors will be used via 'vecs' until native support is confirmed."
+                    )
 
             self.collection = self.db.get_or_create_collection(name=self.collection_name, dimension=dims)
-            
+
             # HNSW Options for in-memory performance
             index_params = {}
             if self.index_in_memory:
                 # These are typical HNSW parameters for better performance
                 index_params = {"m": 16, "ef_construction": 64}
-            
+
             self.collection.create_index(
-                method=self.index_method.value, 
-                measure=self.index_measure.value,
-                index_arguments=index_params
+                method=self.index_method.value, measure=self.index_measure.value, index_arguments=index_params
             )
             logger.info(f"Successfully created collection {self.collection_name} with dimension {dims}")
         except Exception as e:
@@ -175,20 +183,19 @@ class Supabase(VectorStoreBase):
         """
         Search for similar vectors. Supports Hybrid Search via RPC 'match_memories_hybrid'.
         """
-        # Check if hybrid search is requested via special key in filters or config
-        # For now, we'll try to use hybrid if 'hybrid_search' is in filters
-        use_hybrid = False
-        if filters and "hybrid_search" in filters:
-            use_hybrid = filters.pop("hybrid_search")
+        use_hybrid = self.hybrid_search
+        working_filters = filters.copy() if isinstance(filters, dict) else filters
+        if isinstance(working_filters, dict) and "hybrid_search" in working_filters:
+            use_hybrid = working_filters.pop("hybrid_search")
 
         if use_hybrid:
             try:
-                return self._hybrid_search(query, vectors, limit, filters)
+                return self._hybrid_search(query, vectors, limit, working_filters)
             except Exception as e:
                 logger.warning(f"Hybrid search failed, falling back to standard vector search: {e}")
 
         # Standard Vector Search
-        filters = self._preprocess_filters(filters)
+        filters = self._preprocess_filters(working_filters)
         results = self.collection.query(
             data=vectors, limit=limit, filters=filters, include_metadata=True, include_value=True
         )
@@ -202,6 +209,16 @@ class Supabase(VectorStoreBase):
         Execute Hybrid Search using Supabase RPC.
         """
         # Prepare filter JSONB
+        full_text_weight = self.full_text_weight
+        semantic_weight = self.semantic_weight
+        rrf_k = self.rrf_k
+        if isinstance(filters, dict):
+            if "full_text_weight" in filters:
+                full_text_weight = filters.pop("full_text_weight")
+            if "semantic_weight" in filters:
+                semantic_weight = filters.pop("semantic_weight")
+            if "rrf_k" in filters:
+                rrf_k = filters.pop("rrf_k")
         filter_json = json.dumps(filters) if filters else "{}"
 
         sql = text("""
@@ -211,6 +228,9 @@ class Supabase(VectorStoreBase):
                 match_threshold := 0.0,
                 match_count := :limit,
                 query_text := :query,
+                full_text_weight := :full_text_weight,
+                semantic_weight := :semantic_weight,
+                rrf_k := :rrf_k,
                 filter := :filter
             )
         """)
@@ -226,7 +246,16 @@ class Supabase(VectorStoreBase):
             embedding_str = str(query_vector)
 
             result = conn.execute(
-                sql, {"embedding": embedding_str, "limit": limit, "query": query_text, "filter": filter_json}
+                sql,
+                {
+                    "embedding": embedding_str,
+                    "limit": limit,
+                    "query": query_text,
+                    "filter": filter_json,
+                    "full_text_weight": full_text_weight,
+                    "semantic_weight": semantic_weight,
+                    "rrf_k": rrf_k,
+                },
             )
 
             rows = result.fetchall()

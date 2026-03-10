@@ -44,7 +44,12 @@ config = {
         "provider": "supabase",
         "config": {
             "connection_string": "your_connection_string",
-            "collection_name": "enterprise_memories", # Custom table name
+            "collection_name": "enterprise_memories",
+            "hybrid_search": True,
+            "full_text_weight": 1.1,
+            "semantic_weight": 1.0,
+            "rrf_k": 60,
+            "rerank_candidate_multiplier": 5,
         },
     },
     "llm": {
@@ -97,6 +102,9 @@ memory = Memory(config=config)
   </Accordion>
   <Accordion title="Memory Types">
     You can categorize memories into `episodic`, `semantic`, and `procedural`. This is handled via the `metadata` filter but can be steered by providing clear instructions in the `messages` array during the `add()` call.
+  </Accordion>
+  <Accordion title="Hybrid Search Tuning">
+    Ajuste `full_text_weight`, `semantic_weight` e `rrf_k` para calibrar a fusão RRF. Para ganho de qualidade no rerank, aumente `rerank_candidate_multiplier` para ampliar o pool de candidatos.
   </Accordion>
 </AccordionGroup>
 

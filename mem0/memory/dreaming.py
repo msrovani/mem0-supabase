@@ -21,6 +21,7 @@ Format: {{"synthetic_memories": ["Insight 1", "Insight 2"]}}
 Each synthetic memory must be a concise, factual-sounding sentence.
 """
 
+
 class DreamingEngine:
     """
     [Salto: Dreaming Mode]
@@ -43,20 +44,20 @@ class DreamingEngine:
         memory_lines = []
         for m in memories:
             if isinstance(m, dict):
-                text = m.get('memory') or m.get('text') or m.get('data') or str(m)
+                text = m.get("memory") or m.get("text") or m.get("data") or str(m)
                 memory_lines.append(f"- {text}")
             else:
                 memory_lines.append(f"- {str(m)}")
-        
+
         memory_text = "\n".join(memory_lines)
         prompt = DREAM_PROMPT.format(memories=memory_text)
 
         try:
             response = self.llm.generate_response(
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"}
+                messages=[{"role": "user", "content": prompt}], response_format={"type": "json_object"}
             )
             from mem0.memory.utils import remove_code_blocks
+
             data = json.loads(remove_code_blocks(response))
             insights = data.get("synthetic_memories", [])
             logger.info(f"Dreaming completed: {len(insights)} synthetic memories generated.")
@@ -70,4 +71,5 @@ class DreamingEngine:
         Asynchronous dreaming.
         """
         import asyncio
+
         return await asyncio.to_thread(self.dream, memories)

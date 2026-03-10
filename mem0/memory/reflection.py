@@ -41,6 +41,7 @@ If an action is needed, return a concise suggestion.
 If not, return "NONE".
 """
 
+
 class ReflectionEngine:
     """
     [Salto 3] Reflective Background Task.
@@ -54,7 +55,7 @@ class ReflectionEngine:
         memory_lines = []
         for m in memories:
             if isinstance(m, dict):
-                text = m.get('memory') or m.get('text') or m.get('data') or str(m)
+                text = m.get("memory") or m.get("text") or m.get("data") or str(m)
                 memory_lines.append(f"- {text}")
             else:
                 memory_lines.append(f"- {str(m)}")
@@ -93,9 +94,9 @@ class ReflectionEngine:
 
         try:
             from mem0.memory.utils import remove_code_blocks
+
             response = self.llm.generate_response(
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"}
+                messages=[{"role": "user", "content": prompt}], response_format={"type": "json_object"}
             )
             data = json.loads(remove_code_blocks(response))
             return data.get("compacted_memories", [])
@@ -123,12 +124,15 @@ class ReflectionEngine:
 
     async def reflect_async(self, memories: List[Dict[str, Any]]) -> List[str]:
         import asyncio
+
         return await asyncio.to_thread(self.reflect, memories)
 
     async def compact_async(self, memories: List[Dict[str, Any]]) -> List[str]:
         import asyncio
+
         return await asyncio.to_thread(self.compact, memories)
 
     async def generate_heartbeat_async(self, context: List[Dict[str, Any]]) -> Optional[str]:
         import asyncio
+
         return await asyncio.to_thread(self.generate_heartbeat, context)

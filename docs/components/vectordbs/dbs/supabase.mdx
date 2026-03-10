@@ -60,6 +60,11 @@ Here are the parameters available for configuring Supabase Vector Store:
 | `collection_name` | Name for the vector collection | `memories` |
 | `index_method` | Vector index method (hnsw/ivfflat/auto) | `hnsw` |
 | `index_measure` | Distance measure (cosine_distance, etc.) | `cosine_distance` |
+| `hybrid_search` | Enable hybrid search with RRF by default | `true` |
+| `full_text_weight` | Weight for full-text rank in RRF | `1.0` |
+| `semantic_weight` | Weight for semantic rank in RRF | `1.0` |
+| `rrf_k` | RRF k parameter for rank fusion | `60` |
+| `rerank_candidate_multiplier` | Candidate pool size multiplier before rerank | `5` |
 
 
 ### Index Methods

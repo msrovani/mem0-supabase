@@ -2,6 +2,7 @@ from typing import Optional
 from pydantic import Field
 from mem0.configs.rerankers.base import BaseRerankerConfig
 
+
 class SentenceTransformerRerankerConfig(BaseRerankerConfig):
     model: str = Field(
         description="Model name for sentence transformer",

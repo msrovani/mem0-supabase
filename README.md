@@ -2,7 +2,7 @@
 
 > **The 12-Layer Cognitive Memory Architecture for AI Agents, hyper-optimized for Supabase.**
 
-[![GitHub](https://img.shields.io/github/license/mem0ai/mem0)](https://github.com/mem0ai/mem0)
+[![GitHub](https://img.shields.io/github/license/msrovani/mem0-supabase)](https://github.com/msrovani/mem0-supabase)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Supabase Powered](https://img.shields.io/badge/Supabase-Powered-3ecf8e?logo=supabase)](https://supabase.com)
 

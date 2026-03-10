@@ -37,6 +37,11 @@ class SupabaseConfig(BaseModel):
     index_measure: Optional[IndexMeasure] = Field(IndexMeasure.COSINE, description="Distance measure to use")
     use_halfvec: bool = Field(False, description="Use HALFVEC (float16) for vector storage")
     index_in_memory: bool = Field(False, description="Optimize index for in-memory performance")
+    hybrid_search: bool = Field(True, description="Enable hybrid search with RRF by default")
+    full_text_weight: float = Field(1.0, description="Weight for full-text rank in RRF")
+    semantic_weight: float = Field(1.0, description="Weight for semantic rank in RRF")
+    rrf_k: int = Field(60, description="RRF k parameter for hybrid search")
+    rerank_candidate_multiplier: int = Field(5, description="Multiplier for candidate pool size before reranking")
 
     @model_validator(mode="before")
     def check_connection_string(cls, values):

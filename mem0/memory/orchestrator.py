@@ -19,6 +19,7 @@ Instructions:
 Summary of Background Context:
 """
 
+
 class ContextOrchestrator:
     """
     [Salto 2] Context Orchestrator (Paging Mechanism).
@@ -38,8 +39,8 @@ class ContextOrchestrator:
 
         # Divide into Active (most recent/important) and Paged-out
         # In mem0, memories are usually already ranked by similarity/importance
-        active = memories[:self.limit]
-        paged_out = memories[self.limit:]
+        active = memories[: self.limit]
+        paged_out = memories[self.limit :]
 
         logger.info(f"Context Orchestrator: Paging out {len(paged_out)} memories.")
 
@@ -48,15 +49,12 @@ class ContextOrchestrator:
 
         # Format paged-out memories for summarization
         paged_text = "\n".join([f"- {m.get('memory', m.get('text', ''))}" for m in paged_out])
-        
+
         prompt = ORCHESTRATOR_PAGING_PROMPT.format(paged_out_memories=paged_text)
 
         try:
             summary = self.llm.generate_response(messages=[{"role": "user", "content": prompt}])
-            return {
-                "active_context": active,
-                "background_context": summary.strip()
-            }
+            return {"active_context": active, "background_context": summary.strip()}
         except Exception as e:
             logger.error(f"Paging orchestration failed: {e}")
             return {"active_context": active, "background_context": "Paging error."}
@@ -66,11 +64,12 @@ class ContextOrchestrator:
         Asynchronous version of orchestrate.
         """
         import asyncio
+
         if not memories or len(memories) <= self.limit:
             return {"active_context": memories, "background_context": None}
 
-        active = memories[:self.limit]
-        paged_out = memories[self.limit:]
+        active = memories[: self.limit]
+        paged_out = memories[self.limit :]
 
         logger.info(f"Context Orchestrator (Async): Paging out {len(paged_out)} memories.")
 
@@ -81,11 +80,10 @@ class ContextOrchestrator:
         prompt = ORCHESTRATOR_PAGING_PROMPT.format(paged_out_memories=paged_text)
 
         try:
-            summary = await asyncio.to_thread(self.llm.generate_response, messages=[{"role": "user", "content": prompt}])
-            return {
-                "active_context": active,
-                "background_context": summary.strip()
-            }
+            summary = await asyncio.to_thread(
+                self.llm.generate_response, messages=[{"role": "user", "content": prompt}]
+            )
+            return {"active_context": active, "background_context": summary.strip()}
         except Exception as e:
             logger.error(f"Async Paging orchestration failed: {e}")
             return {"active_context": active, "background_context": "Paging error."}

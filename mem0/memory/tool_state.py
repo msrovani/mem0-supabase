@@ -5,11 +5,12 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+
 class ToolStateManager:
     """
     [Salto: Tool-State Memory]
     Manages the 'Save Game' for AI tools.
-    Saves snapshots of tool states (e.g., open URLs, file cursors, active variables) 
+    Saves snapshots of tool states (e.g., open URLs, file cursors, active variables)
     to Supabase for persistent, stateful tool use.
     """
 
@@ -30,20 +31,20 @@ class ToolStateManager:
             "tool_id": tool_id,
             "memory_type": "tool_state",
             "updated_at": datetime.utcnow().isoformat(),
-            "data": f"Tool State for {tool_id}: {state_json}"
+            "data": f"Tool State for {tool_id}: {state_json}",
         }
 
         # We use a unique ID for the tool-state to avoid duplication, or a deterministic one based on tool_id
         state_id = f"state_{tool_id}_{user_id}"
         if agent_id:
             state_id += f"_{agent_id}"
-        
+
         # In Supabase, we can use update or insert
         # For simplicity, we'll use a fixed ID per tool/user/agent
         try:
-            # We don't necessarily need a vector for state, but since we use a vector_store, 
+            # We don't necessarily need a vector for state, but since we use a vector_store,
             # we provide a dummy one if needed or just use the metadata store.
-            dummy_vector = [0.0] * 1536 # Default size for many models
+            dummy_vector = [0.0] * 1536  # Default size for many models
             self.vector_store.insert(vectors=[dummy_vector], ids=[state_id], payloads=[metadata])
             logger.info(f"Tool state saved for {tool_id} (user: {user_id})")
             return state_id
@@ -77,8 +78,10 @@ class ToolStateManager:
 
     async def save_state_async(self, tool_id: str, state: Dict[str, Any], user_id: str, agent_id: Optional[str] = None):
         import asyncio
+
         return await asyncio.to_thread(self.save_state, tool_id, state, user_id, agent_id)
 
     async def get_state_async(self, tool_id: str, user_id: str, agent_id: Optional[str] = None):
         import asyncio
+
         return await asyncio.to_thread(self.get_state, tool_id, user_id, agent_id)

@@ -17,12 +17,12 @@
     "topbarLinks": [
         {
             "name": "Support",
-            "url": "https://github.com/mem0ai/mem0/issues"
+            "url": "https://github.com/msrovani/mem0-supabase/issues"
         }
     ],
     "topbarCtaButton": {
         "name": "GitHub",
-        "url": "https://github.com/mem0ai/mem0"
+        "url": "https://github.com/msrovani/mem0-supabase"
     },
     "anchors": [
         {
@@ -73,7 +73,7 @@
         }
     ],
     "footerSocials": {
-        "github": "https://github.com/mem0ai/mem0",
+        "github": "https://github.com/msrovani/mem0-supabase",
         "x": "https://x.com/mem0ai"
     }
 }
