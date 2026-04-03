@@ -4,3 +4,5 @@ pydantic==2.10.4
 mem0ai>=0.1.48
 python-dotenv==1.0.1
 psycopg>=3.2.8
+python-jose[cryptography]>=3.3.0
+slowapi>=0.1.9

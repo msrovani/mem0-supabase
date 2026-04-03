@@ -30,10 +30,15 @@ class PostgresManager:
                     updated_at   TIMESTAMPTZ DEFAULT NOW(),
                     is_deleted   BOOLEAN DEFAULT FALSE,
                     actor_id     TEXT,
+                    actor_type   TEXT,
                     role         TEXT,
-                    user_id      TEXT
+                    user_id      TEXT,
+                    conversation_id TEXT,
+                    provenance   JSONB
                 );
                 CREATE INDEX IF NOT EXISTS idx_history_memory_id ON history(memory_id);
+                CREATE INDEX IF NOT EXISTS idx_history_actor_id ON history(actor_id);
+                CREATE INDEX IF NOT EXISTS idx_history_conversation_id ON history(conversation_id);
             """)
             conn.execute(stmt)
             conn.commit()
@@ -49,19 +54,24 @@ class PostgresManager:
         updated_at: Optional[str] = None,
         is_deleted: int = 0,
         actor_id: Optional[str] = None,
+        actor_type: Optional[str] = None,
         role: Optional[str] = None,
         user_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+        provenance: Optional[Dict[str, Any]] = None,
     ) -> None:
         session = self.Session()
         try:
             stmt = text("""
                 INSERT INTO history (
                     id, memory_id, old_memory, new_memory, event,
-                    created_at, updated_at, is_deleted, actor_id, role, user_id
+                    created_at, updated_at, is_deleted, actor_id, actor_type, role, user_id,
+                    conversation_id, provenance
                 )
                 VALUES (
                     :id, :memory_id, :old_memory, :new_memory, :event,
-                    :created_at, :updated_at, :is_deleted, :actor_id, :role, :user_id
+                    :created_at, :updated_at, :is_deleted, :actor_id, :actor_type, :role, :user_id,
+                    :conversation_id, :provenance
                 )
             """)
 
@@ -86,8 +96,11 @@ class PostgresManager:
                     "updated_at": u_at,
                     "is_deleted": bool(is_deleted),
                     "actor_id": actor_id,
+                    "actor_type": actor_type,
                     "role": role,
                     "user_id": user_id,
+                    "conversation_id": conversation_id,
+                    "provenance": provenance,
                 },
             )
             session.commit()
@@ -103,7 +116,8 @@ class PostgresManager:
         try:
             stmt = text("""
                 SELECT id, memory_id, old_memory, new_memory, event,
-                       created_at, updated_at, is_deleted, actor_id, role, user_id
+                       created_at, updated_at, is_deleted, actor_id, actor_type, role, user_id,
+                       conversation_id, provenance
                 FROM history
                 WHERE memory_id = :memory_id
                 ORDER BY created_at ASC, updated_at ASC
@@ -122,8 +136,11 @@ class PostgresManager:
                     "updated_at": str(row.updated_at) if row.updated_at else None,
                     "is_deleted": row.is_deleted,
                     "actor_id": row.actor_id,
+                    "actor_type": row.actor_type,
                     "role": row.role,
                     "user_id": row.user_id,
+                    "conversation_id": row.conversation_id,
+                    "provenance": row.provenance,
                 }
                 for row in rows
             ]
@@ -143,3 +160,124 @@ class PostgresManager:
 
     def close(self) -> None:
         pass  # SQLAlchemy engine manages connections
+
+    # =========================================================================
+    # Actor-Aware Memory Queries (Phase 1.2)
+    # Origin: Mem0 Group-Chat v2 (PR #2669)
+    # =========================================================================
+
+    def get_by_actor(self, actor_id: str, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get all history records for a specific actor."""
+        session = self.Session()
+        try:
+            stmt = text("""
+                SELECT id, memory_id, old_memory, new_memory, event,
+                       created_at, updated_at, is_deleted, actor_id, actor_type, role, user_id,
+                       conversation_id, provenance
+                FROM history
+                WHERE actor_id = :actor_id
+                ORDER BY created_at DESC
+                LIMIT :limit OFFSET :offset
+            """)
+            result = session.execute(stmt, {"actor_id": actor_id, "limit": limit, "offset": offset})
+            rows = result.fetchall()
+
+            return [
+                {
+                    "id": str(row.id),
+                    "memory_id": row.memory_id,
+                    "old_memory": row.old_memory,
+                    "new_memory": row.new_memory,
+                    "event": row.event,
+                    "created_at": str(row.created_at) if row.created_at else None,
+                    "updated_at": str(row.updated_at) if row.updated_at else None,
+                    "is_deleted": row.is_deleted,
+                    "actor_id": row.actor_id,
+                    "actor_type": row.actor_type,
+                    "role": row.role,
+                    "user_id": row.user_id,
+                    "conversation_id": row.conversation_id,
+                    "provenance": row.provenance,
+                }
+                for row in rows
+            ]
+        finally:
+            session.close()
+
+    def get_by_conversation(self, conversation_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get all history records for a specific conversation."""
+        session = self.Session()
+        try:
+            stmt = text("""
+                SELECT id, memory_id, old_memory, new_memory, event,
+                       created_at, updated_at, is_deleted, actor_id, actor_type, role, user_id,
+                       conversation_id, provenance
+                FROM history
+                WHERE conversation_id = :conversation_id
+                ORDER BY created_at ASC
+                LIMIT :limit
+            """)
+            result = session.execute(stmt, {"conversation_id": conversation_id, "limit": limit})
+            rows = result.fetchall()
+
+            return [
+                {
+                    "id": str(row.id),
+                    "memory_id": row.memory_id,
+                    "old_memory": row.old_memory,
+                    "new_memory": row.new_memory,
+                    "event": row.event,
+                    "created_at": str(row.created_at) if row.created_at else None,
+                    "updated_at": str(row.updated_at) if row.updated_at else None,
+                    "is_deleted": row.is_deleted,
+                    "actor_id": row.actor_id,
+                    "actor_type": row.actor_type,
+                    "role": row.role,
+                    "user_id": row.user_id,
+                    "conversation_id": row.conversation_id,
+                    "provenance": row.provenance,
+                }
+                for row in rows
+            ]
+        finally:
+            session.close()
+
+    def get_by_actor_and_conversation(
+        self, actor_id: str, conversation_id: str, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Get history records for a specific actor within a specific conversation."""
+        session = self.Session()
+        try:
+            stmt = text("""
+                SELECT id, memory_id, old_memory, new_memory, event,
+                       created_at, updated_at, is_deleted, actor_id, actor_type, role, user_id,
+                       conversation_id, provenance
+                FROM history
+                WHERE actor_id = :actor_id AND conversation_id = :conversation_id
+                ORDER BY created_at ASC
+                LIMIT :limit
+            """)
+            result = session.execute(stmt, {"actor_id": actor_id, "conversation_id": conversation_id, "limit": limit})
+            rows = result.fetchall()
+
+            return [
+                {
+                    "id": str(row.id),
+                    "memory_id": row.memory_id,
+                    "old_memory": row.old_memory,
+                    "new_memory": row.new_memory,
+                    "event": row.event,
+                    "created_at": str(row.created_at) if row.created_at else None,
+                    "updated_at": str(row.updated_at) if row.updated_at else None,
+                    "is_deleted": row.is_deleted,
+                    "actor_id": row.actor_id,
+                    "actor_type": row.actor_type,
+                    "role": row.role,
+                    "user_id": row.user_id,
+                    "conversation_id": row.conversation_id,
+                    "provenance": row.provenance,
+                }
+                for row in rows
+            ]
+        finally:
+            session.close()

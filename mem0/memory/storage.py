@@ -45,7 +45,10 @@ class SQLiteManager:
                     "updated_at",
                     "is_deleted",
                     "actor_id",
+                    "actor_type",
                     "role",
+                    "conversation_id",
+                    "provenance",
                 }
 
                 if old_cols == expected_cols:
@@ -113,7 +116,10 @@ class SQLiteManager:
                         updated_at   DATETIME,
                         is_deleted   INTEGER,
                         actor_id     TEXT,
-                        role         TEXT
+                        actor_type   TEXT,
+                        role         TEXT,
+                        conversation_id TEXT,
+                        provenance   TEXT
                     )
                 """
                 )
@@ -134,7 +140,10 @@ class SQLiteManager:
         updated_at: Optional[str] = None,
         is_deleted: int = 0,
         actor_id: Optional[str] = None,
+        actor_type: Optional[str] = None,
         role: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+        provenance: Optional[str] = None,
     ) -> None:
         with self._lock:
             try:
@@ -143,9 +152,10 @@ class SQLiteManager:
                     """
                     INSERT INTO history (
                         id, memory_id, old_memory, new_memory, event,
-                        created_at, updated_at, is_deleted, actor_id, role
+                        created_at, updated_at, is_deleted, actor_id, actor_type, role,
+                        conversation_id, provenance
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         str(uuid.uuid4()),
@@ -157,7 +167,10 @@ class SQLiteManager:
                         updated_at,
                         is_deleted,
                         actor_id,
+                        actor_type,
                         role,
+                        conversation_id,
+                        provenance,
                     ),
                 )
                 self.connection.execute("COMMIT")
@@ -171,7 +184,8 @@ class SQLiteManager:
             cur = self.connection.execute(
                 """
                 SELECT id, memory_id, old_memory, new_memory, event,
-                       created_at, updated_at, is_deleted, actor_id, role
+                       created_at, updated_at, is_deleted, actor_id, actor_type, role,
+                       conversation_id, provenance
                 FROM history
                 WHERE memory_id = ?
                 ORDER BY created_at ASC, DATETIME(updated_at) ASC
@@ -191,7 +205,125 @@ class SQLiteManager:
                 "updated_at": r[6],
                 "is_deleted": bool(r[7]),
                 "actor_id": r[8],
-                "role": r[9],
+                "actor_type": r[9],
+                "role": r[10],
+                "conversation_id": r[11],
+                "provenance": r[12],
+            }
+            for r in rows
+        ]
+
+    # =========================================================================
+    # Actor-Aware Memory Queries (Phase 1.2)
+    # Origin: Mem0 Group-Chat v2 (PR #2669)
+    # =========================================================================
+
+    def get_by_actor(self, actor_id: str, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get all history records for a specific actor."""
+        with self._lock:
+            cur = self.connection.execute(
+                """
+                SELECT id, memory_id, old_memory, new_memory, event,
+                       created_at, updated_at, is_deleted, actor_id, actor_type, role,
+                       conversation_id, provenance
+                FROM history
+                WHERE actor_id = ?
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            """,
+                (actor_id, limit, offset),
+            )
+            rows = cur.fetchall()
+
+        return [
+            {
+                "id": r[0],
+                "memory_id": r[1],
+                "old_memory": r[2],
+                "new_memory": r[3],
+                "event": r[4],
+                "created_at": r[5],
+                "updated_at": r[6],
+                "is_deleted": bool(r[7]),
+                "actor_id": r[8],
+                "actor_type": r[9],
+                "role": r[10],
+                "conversation_id": r[11],
+                "provenance": r[12],
+            }
+            for r in rows
+        ]
+
+    def get_by_conversation(self, conversation_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get all history records for a specific conversation."""
+        with self._lock:
+            cur = self.connection.execute(
+                """
+                SELECT id, memory_id, old_memory, new_memory, event,
+                       created_at, updated_at, is_deleted, actor_id, actor_type, role,
+                       conversation_id, provenance
+                FROM history
+                WHERE conversation_id = ?
+                ORDER BY created_at ASC
+                LIMIT ?
+            """,
+                (conversation_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return [
+            {
+                "id": r[0],
+                "memory_id": r[1],
+                "old_memory": r[2],
+                "new_memory": r[3],
+                "event": r[4],
+                "created_at": r[5],
+                "updated_at": r[6],
+                "is_deleted": bool(r[7]),
+                "actor_id": r[8],
+                "actor_type": r[9],
+                "role": r[10],
+                "conversation_id": r[11],
+                "provenance": r[12],
+            }
+            for r in rows
+        ]
+
+    def get_by_actor_and_conversation(
+        self, actor_id: str, conversation_id: str, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Get history records for a specific actor within a specific conversation."""
+        with self._lock:
+            cur = self.connection.execute(
+                """
+                SELECT id, memory_id, old_memory, new_memory, event,
+                       created_at, updated_at, is_deleted, actor_id, actor_type, role,
+                       conversation_id, provenance
+                FROM history
+                WHERE actor_id = ? AND conversation_id = ?
+                ORDER BY created_at ASC
+                LIMIT ?
+            """,
+                (actor_id, conversation_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return [
+            {
+                "id": r[0],
+                "memory_id": r[1],
+                "old_memory": r[2],
+                "new_memory": r[3],
+                "event": r[4],
+                "created_at": r[5],
+                "updated_at": r[6],
+                "is_deleted": bool(r[7]),
+                "actor_id": r[8],
+                "actor_type": r[9],
+                "role": r[10],
+                "conversation_id": r[11],
+                "provenance": r[12],
             }
             for r in rows
         ]

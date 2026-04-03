@@ -5,6 +5,10 @@
 [![GitHub](https://img.shields.io/github/license/msrovani/mem0-supabase)](https://github.com/msrovani/mem0-supabase)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Supabase Powered](https://img.shields.io/badge/Supabase-Powered-3ecf8e?logo=supabase)](https://supabase.com)
+[![CI](https://github.com/msrovani/mem0-supabase/actions/workflows/ci.yml/badge.svg)](https://github.com/msrovani/mem0-supabase/actions/workflows/ci.yml)
+[![Tests: 39 passing](https://img.shields.io/badge/tests-39%20passing-brightgreen.svg)](https://github.com/msrovani/mem0-supabase)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
 Mem0-Supabase is the **most advanced open-source memory system for AI agents**, providing enterprise-grade cognitive capabilities through a unique 12-layer architecture. By leveraging Supabase's native features (Postgres, Realtime, Storage, Vault), it delivers unmatched performance, security, and scalability.
 
@@ -507,7 +511,7 @@ from mem0.security import budgets
 budgets.MAX_TRANSCRIPT_CHARS = 25000  # ~5-7 pages
 budgets.MAX_ARTIFACTS_PER_INTERACTION = 5
 budgets.DEFAULT_SQL_TIMEOUT = "30s"
-budgets.DEFAUT_CACHE_THRESHOLD = 0.99
+budgets.DEFAULT_CACHE_THRESHOLD = 0.99
 ```
 
 ---

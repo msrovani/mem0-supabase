@@ -1,0 +1,88 @@
+services:
+  # ============================================
+  # Mem0 API Server
+  # ============================================
+  mem0-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mem0-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=mem0-postgres
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://mem0-redis:6379
+    depends_on:
+      mem0-postgres:
+        condition: service_healthy
+      mem0-redis:
+        condition: service_healthy
+    networks:
+      - mem0net
+    volumes:
+      - ./server:/app/server:ro
+      - ./mem0:/app/mem0:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ============================================
+  # PostgreSQL with pgvector
+  # ============================================
+  mem0-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: mem0-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-mem0}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d:ro
+    networks:
+      - mem0net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ============================================
+  # Redis (L1 Cache)
+  # ============================================
+  mem0-redis:
+    image: redis:7-alpine
+    container_name: mem0-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - mem0net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+networks:
+  mem0net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:

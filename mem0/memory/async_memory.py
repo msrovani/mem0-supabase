@@ -20,6 +20,7 @@ from mem0.configs.prompts import (
 from mem0.exceptions import ValidationError as Mem0ValidationError
 from mem0.memory.base import MemoryBase
 from mem0.memory.telemetry import capture_event
+from mem0.security import redact_text, log_event, EventType
 from mem0.memory.utils import (
     build_filters_and_metadata,
     extract_json,
@@ -52,8 +53,8 @@ logger = logging.getLogger(__name__)
 
 
 class AsyncMemory(MemoryBase):
-    def __init__(self, config: MemoryConfig = MemoryConfig()):
-        self.config = config
+    def __init__(self, config: Optional[MemoryConfig] = None):
+        self.config = config if config is not None else MemoryConfig()
 
         self.embedding_model = EmbedderFactory.create(
             self.config.embedder.provider,
@@ -225,6 +226,21 @@ class AsyncMemory(MemoryBase):
                 suggestion=f"Use '{MemoryType.PROCEDURAL.value}' to create procedural memories.",
             )
 
+        # PII Redaction: redact sensitive data before storing
+        if isinstance(messages, list):
+            for msg in messages:
+                if isinstance(msg, dict) and msg.get("content"):
+                    redaction_result = redact_text(msg["content"])
+                    msg["content"] = redaction_result.redacted_text
+                    if not redaction_result.is_clean:
+                        log_event(
+                            EventType.PII_REDACTION,
+                            actor=user_id or agent_id or run_id or "system",
+                            action="memory_add_pii_redacted_async",
+                            resource_type="memory",
+                            details=redaction_result.redactions_found,
+                        )
+
         if isinstance(messages, str):
             messages = [{"role": "user", "content": messages}]
         elif isinstance(messages, dict):
@@ -253,6 +269,16 @@ class AsyncMemory(MemoryBase):
         vector_store_result, graph_result = await asyncio.gather(vector_store_task, graph_task)
 
         capture_event("mem0.add", self, {"version": self.api_version, "sync_type": "async"})
+
+        # Audit logging
+        actor = user_id or agent_id or run_id or "system"
+        log_event(
+            EventType.MEMORY_CREATE,
+            actor=actor,
+            action="add_memories_async",
+            resource_type="memory",
+            details={"sync_type": "async", "infer": infer},
+        )
 
         # [Salto 3] Trigger Reflection Background Task
         if self.config.enable_reflection:
@@ -643,7 +669,7 @@ class AsyncMemory(MemoryBase):
                 for cond in v:
                     processed.update(self._process_metadata_filters(cond))
             elif k in ("OR", "NOT"):
-                processed[f"${k.lower()}"] = [self._process_metadata_filters(c) for cond in v for c in cond.items()]
+                processed[f"${k.lower()}"] = [self._process_metadata_filters(cond) for cond in v]
             else:
                 processed.update(proc(k, v))
         return processed
@@ -653,21 +679,62 @@ class AsyncMemory(MemoryBase):
         if not existing:
             raise ValueError(f"Memory with ID {memory_id} not found.")
 
+        # Immutability gating: config-level OR per-memory flag
+        if self.config.enable_immutable_memories or existing.payload.get("immutable"):
+            raise Mem0ValidationError(
+                message=f"Memory {memory_id} is immutable and cannot be updated.",
+                error_code="IMMUTABLE_001",
+                details={"memory_id": memory_id},
+                suggestion="Create a new memory instead of updating an immutable one.",
+            )
+
         new_data = data if data is not None else existing.payload.get("data")
         emb = {new_data: await asyncio.to_thread(self.embedding_model.embed, new_data, "update")}
         await self._update_memory(memory_id, new_data, emb, metadata=metadata)
+        log_event(
+            EventType.MEMORY_UPDATE,
+            actor="system",
+            action="update_memory_async",
+            resource_type="memory",
+            resource_id=memory_id,
+            details={"data_length": len(new_data) if new_data else 0},
+        )
         return {"message": "Memory updated successfully!"}
 
     async def delete(self, memory_id):
+        # Immutability gating: config-level OR per-memory flag
+        existing = await asyncio.to_thread(self.vector_store.get, vector_id=memory_id)
+        if existing and (self.config.enable_immutable_memories or existing.payload.get("immutable")):
+            raise Mem0ValidationError(
+                message=f"Memory {memory_id} is immutable and cannot be deleted.",
+                error_code="IMMUTABLE_002",
+                details={"memory_id": memory_id},
+                suggestion="Immutable memories are protected from deletion.",
+            )
+
         await self._delete_memory(memory_id)
+        log_event(
+            EventType.MEMORY_DELETE,
+            actor="system",
+            action="delete_memory_async",
+            resource_type="memory",
+            resource_id=memory_id,
+        )
         return {"message": "Memory deleted successfully!"}
 
     async def delete_all(self, user_id=None, agent_id=None, run_id=None):
         f = {k: v for k, v in {"user_id": user_id, "agent_id": agent_id, "run_id": run_id}.items() if v}
         if not f:
             raise ValueError("Filter required.")
-        mems = (await asyncio.to_thread(self.vector_store.list, filters=f))[0]
+        mems = await asyncio.to_thread(self.vector_store.list, filters=f)
+        # Normalize: handle both flat list and nested list returns
+        if isinstance(mems, (list, tuple)) and mems and isinstance(mems[0], (list, tuple)):
+            mems = mems[0]
         for m in mems:
+            # Immutability gating: skip immutable memories in bulk delete
+            if self.config.enable_immutable_memories or m.payload.get("immutable"):
+                logger.debug(f"Skipping immutable memory {m.id} in delete_all (async).")
+                continue
             await self._delete_memory(m.id)
         return {"message": "Deleted."}
 
@@ -705,9 +772,10 @@ class AsyncMemory(MemoryBase):
             {"role": "user", "content": "Summarize conversation."},
         ]
         proc = remove_code_blocks(await asyncio.to_thread(self.llm.generate_response, messages=msgs))
-        metadata["memory_type"] = MemoryType.PROCEDURAL.value
+        proc_meta = (metadata or {}).copy()
+        proc_meta["memory_type"] = MemoryType.PROCEDURAL.value
         mid = await self._create_memory(
-            proc, {proc: await asyncio.to_thread(self.embedding_model.embed, proc, "add")}, metadata
+            proc, {proc: await asyncio.to_thread(self.embedding_model.embed, proc, "add")}, proc_meta
         )
         return {"results": [{"id": mid, "memory": proc, "event": "ADD"}]}
 

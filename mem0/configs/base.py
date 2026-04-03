@@ -30,6 +30,13 @@ class MemoryItem(BaseModel):
     score: Optional[float] = Field(None, description="The score associated with the text data")
     created_at: Optional[str] = Field(None, description="The timestamp when the memory was created")
     updated_at: Optional[str] = Field(None, description="The timestamp when the memory was updated")
+    # Phase 1.2: Actor-Aware Memory Tags (Origin: Mem0 Group-Chat v2, PR #2669)
+    actor_id: Optional[str] = Field(None, description="The ID of the actor who created this memory")
+    actor_type: Optional[str] = Field(None, description="The type of actor (user|agent|system)")
+    conversation_id: Optional[str] = Field(None, description="The conversation/session this memory belongs to")
+    provenance: Optional[Dict[str, Any]] = Field(None, description="Provenance metadata for memory origin")
+    # Upstream Feature (v1.0.4, Feb 2026): Memory Immutability
+    immutable: Optional[bool] = Field(None, description="Whether this memory is protected from updates/deletes")
 
 
 class MemoryConfig(BaseModel):
@@ -128,4 +135,31 @@ class MemoryConfig(BaseModel):
     enable_tool_state: bool = Field(
         description="Enable Tool-State Memory (Save Game for tools)",
         default=False,
+    )
+    # Upstream Feature (v1.0.4, Feb 2026): Memory Immutability
+    enable_immutable_memories: bool = Field(
+        description="Enable immutable memory flag support",
+        default=True,
+    )
+    # Upstream Feature (Jan 2026): Hybrid Search
+    enable_hybrid_search: bool = Field(
+        description="Enable hybrid semantic + keyword search",
+        default=False,
+    )
+    hybrid_search_semantic_weight: float = Field(
+        description="Weight for semantic search in hybrid RRF (0.0-1.0)",
+        default=0.6,
+    )
+    hybrid_search_keyword_weight: float = Field(
+        description="Weight for keyword search in hybrid RRF (0.0-1.0)",
+        default=0.4,
+    )
+    # Phase 1.2: Actor-Aware Memory Configuration
+    default_actor_type: str = Field(
+        description="Default actor type when not specified",
+        default="user",
+    )
+    enable_actor_tracking: bool = Field(
+        description="Enable actor-aware memory tagging",
+        default=True,
     )

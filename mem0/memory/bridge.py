@@ -39,12 +39,12 @@ class MemoryBridge:
                 return False
 
             # If target_agent_ids is None, make it global for the user (agent_id = None)
-            new_agent_id = None if not target_agent_ids else target_agent_ids
+            # Otherwise share with each target agent individually
+            agent_ids = [None] if not target_agent_ids else target_agent_ids
 
-            # Update the memory in the vector store
-            # Note: This requires the memory instance to have an update method that handles agent_id
-            self.memory.update(memory_id, data=memory["memory"], metadata={"agent_id": new_agent_id})
-            logger.info(f"Memory {memory_id} shared with {new_agent_id}")
+            for aid in agent_ids:
+                self.memory.update(memory_id, data=memory["memory"], metadata={"agent_id": aid})
+            logger.info(f"Memory {memory_id} shared with {agent_ids}")
             return True
         except Exception as e:
             logger.error(f"Failed to share memory: {e}")

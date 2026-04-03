@@ -2,6 +2,7 @@ import concurrent
 import hashlib
 import json
 import logging
+import threading
 import uuid
 import warnings
 from copy import deepcopy
@@ -22,6 +23,7 @@ from mem0.exceptions import ValidationError as Mem0ValidationError
 from mem0.memory.base import MemoryBase
 from mem0.memory.setup import setup_config
 from mem0.memory.telemetry import capture_event
+from mem0.security import redact_text, log_event, EventType
 from mem0.memory.utils import (
     build_filters_and_metadata,
     extract_json,
@@ -58,8 +60,8 @@ logger = logging.getLogger(__name__)
 
 
 class Memory(MemoryBase):
-    def __init__(self, config: MemoryConfig = MemoryConfig()):
-        self.config = config
+    def __init__(self, config: Optional[MemoryConfig] = None):
+        self.config = config if config is not None else MemoryConfig()
 
         self.custom_fact_extraction_prompt = self.config.custom_fact_extraction_prompt
         self.custom_update_memory_prompt = self.config.custom_update_memory_prompt
@@ -143,6 +145,7 @@ class Memory(MemoryBase):
 
         # [Salto 3] Reflection Engine
         self.reflection_engine = ReflectionEngine(llm=self.llm)
+        self._counter_lock = threading.Lock()
         self.addition_counter = 0
 
         # [Salto: Dreaming Mode]
@@ -156,6 +159,7 @@ class Memory(MemoryBase):
         self.bridge = MemoryBridge(memory_instance=self)
 
         # SSR: Resonance Buffer (Subconscious Working Memory)
+        self._resonance_lock = threading.Lock()
         self.resonance_buffer = []
         if self.config.enable_resonance and self.lifecycle:
             self.resonance_channel = self.lifecycle.subscribe_to_resonance(self._handle_resonance)
@@ -173,10 +177,11 @@ class Memory(MemoryBase):
             "is_flashbulb": payload.get("is_flashbulb", False),
             "importance_score": payload.get("payload", {}).get("importance_score", 0.0),
         }
-        self.resonance_buffer.append(memory_data)
-        # Keep buffer lean (e.g., last 5 resonances)
-        if len(self.resonance_buffer) > 5:
-            self.resonance_buffer.pop(0)
+        with self._resonance_lock:
+            self.resonance_buffer.append(memory_data)
+            # Keep buffer lean (e.g., last 5 resonances)
+            if len(self.resonance_buffer) > 5:
+                self.resonance_buffer.pop(0)
         logger.info(f"Subconscious resonance absorbed: {memory_data['id']}")
 
     def synthesize_identity(self, user_id: str, agent_id: Optional[str] = None) -> str:
@@ -214,14 +219,8 @@ class Memory(MemoryBase):
 
     @staticmethod
     def _process_config(config_dict: Dict[str, Any]) -> Dict[str, Any]:
-        if "graph_store" in config_dict:
-            # Allow graph store if it is supabase
-            pass
-        try:
-            return config_dict
-        except ValidationError as e:
-            logger.error(f"Configuration validation error: {e}")
-            raise
+        """Validate and normalize configuration dict before instantiation."""
+        return config_dict
 
     def _add_to_graph(self, messages, filters):
         """
@@ -290,6 +289,7 @@ class Memory(MemoryBase):
         org_id: Optional[str] = None,
         team_id: Optional[str] = None,
         visibility: str = "private",
+        immutable: bool = False,
     ):
         processed_metadata, effective_filters = build_filters_and_metadata(
             user_id=user_id,
@@ -303,6 +303,8 @@ class Memory(MemoryBase):
         if team_id:
             processed_metadata["team_id"] = team_id
         processed_metadata["visibility"] = visibility
+        if immutable:
+            processed_metadata["immutable"] = True
 
         if memory_type is not None and memory_type != MemoryType.PROCEDURAL.value:
             raise Mem0ValidationError(
@@ -311,6 +313,21 @@ class Memory(MemoryBase):
                 details={"provided_type": memory_type, "valid_type": MemoryType.PROCEDURAL.value},
                 suggestion=f"Use '{MemoryType.PROCEDURAL.value}' to create procedural memories.",
             )
+
+        # PII Redaction: redact sensitive data before storing
+        if isinstance(messages, list):
+            for msg in messages:
+                if isinstance(msg, dict) and msg.get("content"):
+                    redaction_result = redact_text(msg["content"])
+                    msg["content"] = redaction_result.redacted_text
+                    if not redaction_result.is_clean:
+                        log_event(
+                            EventType.PII_REDACTION,
+                            actor=user_id or agent_id or run_id or "system",
+                            action="memory_add_pii_redacted",
+                            resource_type="memory",
+                            details=redaction_result.redactions_found,
+                        )
 
         if isinstance(messages, str):
             messages = [{"role": "user", "content": messages}]
@@ -345,11 +362,25 @@ class Memory(MemoryBase):
             {"version": self.api_version, "sync_type": "sync"},
         )
 
+        # Audit logging
+        actor = user_id or agent_id or run_id or "system"
+        log_event(
+            EventType.MEMORY_CREATE,
+            actor=actor,
+            action="add_memories",
+            resource_type="memory",
+            details={"sync_type": "sync", "infer": infer},
+        )
+
         # [Salto 3] Trigger Reflection Background Task
         if self.config.enable_reflection:
-            self.addition_counter += 1
-            if self.addition_counter >= self.config.reflection_interval:
-                self.addition_counter = 0
+            with self._counter_lock:
+                self.addition_counter += 1
+                should_reflect = self.addition_counter >= self.config.reflection_interval
+                if should_reflect:
+                    self.addition_counter = 0
+
+            if should_reflect:
 
                 def run_reflection_sync(u_id, a_id):
                     try:
@@ -374,9 +405,13 @@ class Memory(MemoryBase):
 
         # [Salto: Dreaming Mode] Trigger
         if self.config.enable_dreaming:
-            self.dreaming_counter += 1
-            if self.dreaming_counter >= self.config.dreaming_interval:
-                self.dreaming_counter = 0
+            with self._counter_lock:
+                self.dreaming_counter += 1
+                should_dream = self.dreaming_counter >= self.config.dreaming_interval
+                if should_dream:
+                    self.dreaming_counter = 0
+
+            if should_dream:
 
                 def run_dreaming_sync(u_id, a_id):
                     try:
@@ -532,12 +567,22 @@ class Memory(MemoryBase):
                 elif event_type == "UPDATE":
                     mem_id = temp_uuid_mapping.get(resp.get("id"))
                     if mem_id:
+                        # Check immutability before update
+                        existing_mem = self.vector_store.get(vector_id=mem_id)
+                        if existing_mem and existing_mem.payload.get("immutable"):
+                            logger.info(f"Skipping UPDATE for immutable memory {mem_id}")
+                            continue
                         self._update_memory(mem_id, action_text, new_message_embeddings, deepcopy(metadata))
                         returned_memories.append({"id": mem_id, "memory": action_text, "event": "UPDATE"})
 
                 elif event_type == "DELETE":
                     mem_id = temp_uuid_mapping.get(resp.get("id"))
                     if mem_id:
+                        # Check immutability before delete
+                        existing_mem = self.vector_store.get(vector_id=mem_id)
+                        if existing_mem and existing_mem.payload.get("immutable"):
+                            logger.info(f"Skipping DELETE for immutable memory {mem_id}")
+                            continue
                         self._delete_memory(mem_id)
                         returned_memories.append({"id": mem_id, "memory": action_text, "event": "DELETE"})
             except Exception as e:
@@ -608,7 +653,22 @@ class Memory(MemoryBase):
         metadata_filters=None,
         fields=None,
         rerank=True,
+        temporal: bool = False,
     ):
+        # Upstream Feature (Feb 2026): Temporal Search
+        if temporal:
+            from mem0.memory.temporal_search import TemporalParser
+
+            parser = TemporalParser()
+            parsed = parser.parse(query)
+            if parsed["has_temporal"]:
+                query = parsed["cleaned_query"]
+                temporal_filters = parser.build_supabase_filter(parsed)
+                if filters:
+                    filters = {**filters, **temporal_filters}
+                else:
+                    filters = temporal_filters
+
         applied = (filters or {}).copy()
         if metadata_filters:
             applied.update(metadata_filters)
@@ -619,6 +679,11 @@ class Memory(MemoryBase):
             eff_filters.update(applied)
 
         embeddings = self.embedding_model.embed(query, "search")
+
+        # Upstream Feature (Jan 2026): Hybrid Search
+        if self.config.enable_hybrid_search:
+            return self._hybrid_search(query, embeddings, limit, eff_filters, threshold, rerank, fields)
+
         search_limit = limit
         candidate_multiplier = getattr(self.config.vector_store.config, "rerank_candidate_multiplier", 1)
         if rerank and self.reranker and candidate_multiplier and candidate_multiplier > 1:
@@ -652,8 +717,9 @@ class Memory(MemoryBase):
                 logger.warning(f"Rerank failed: {e}")
 
         results = {"results": select_fields(formatted, fields)}
-        if self.resonance_buffer:
-            results["subconscious_context"] = self.resonance_buffer
+        with self._resonance_lock:
+            if self.resonance_buffer:
+                results["subconscious_context"] = list(self.resonance_buffer)
         if self.config.enable_ego and eff_filters.get("user_id"):
             id_filters = {"user_id": eff_filters["user_id"], "memory_type": "identity"}
             identity_mems = self.vector_store.list(filters=id_filters, limit=1)
@@ -667,6 +733,94 @@ class Memory(MemoryBase):
             if identity_mems:
                 results["persona_identity"] = identity_mems[0].payload.get("data", "")
         return results
+
+    def _hybrid_search(self, query, embeddings, limit, eff_filters, threshold, rerank, fields):
+        """Perform hybrid semantic + keyword search using RRF."""
+        from mem0.memory.hybrid_search import HybridSearchEngine, SupabaseHybridSearch
+
+        engine = HybridSearchEngine(
+            rrf_k=60.0,
+            semantic_weight=self.config.hybrid_search_semantic_weight,
+            keyword_weight=self.config.hybrid_search_keyword_weight,
+        )
+
+        # 1. Semantic search
+        search_limit = limit * 2
+        semantic_results = []
+        try:
+            vector_results = self.vector_store.search(
+                query=query, vectors=embeddings, limit=search_limit, filters=eff_filters
+            )
+            semantic_results = [
+                {"id": m.id, "memory": m.payload.get("data", ""), "score": m.score}
+                for m in vector_results
+                if not threshold or m.score >= threshold
+            ]
+        except Exception as e:
+            logger.error(f"Hybrid semantic search error: {e}")
+
+        # 2. Keyword search
+        keyword_results = []
+        try:
+            fts_query = engine.build_fts_query(query)
+            # Use Supabase RPC or fallback
+            keyword_results = self._keyword_search(fts_query, eff_filters, search_limit)
+        except Exception as e:
+            logger.error(f"Hybrid keyword search error: {e}")
+
+        # 3. Combine with RRF
+        combined = engine.hybrid_search(semantic_results, keyword_results, limit)
+
+        # Format results
+        promoted = ["user_id", "agent_id", "run_id", "actor_id", "role"]
+        formatted = []
+        for r in combined:
+            item = {
+                "id": r["id"],
+                "memory": r.get("memory", ""),
+                "score": r.get("hybrid_score", 0),
+                "search_source": r.get("search_source", []),
+            }
+            # Fetch full payload for metadata
+            try:
+                full_mem = self.vector_store.get(vector_id=r["id"])
+                if full_mem:
+                    for k in promoted:
+                        if k in full_mem.payload:
+                            item[k] = full_mem.payload[k]
+                    if "importance_score" in full_mem.payload:
+                        item["importance_score"] = full_mem.payload["importance_score"]
+            except Exception:
+                pass
+            formatted.append(item)
+
+        if rerank and self.reranker and formatted:
+            try:
+                formatted = self.reranker.rerank(query, formatted, limit)
+            except Exception as e:
+                logger.warning(f"Rerank failed: {e}")
+
+        return {"results": select_fields(formatted, fields)}
+
+    def _keyword_search(self, query: str, filters: Dict, limit: int) -> list:
+        """Keyword search fallback using Supabase client."""
+        try:
+            from mem0.memory.hybrid_search import HybridSearchEngine, SupabaseHybridSearch
+
+            engine = HybridSearchEngine()
+            keywords = engine.extract_keywords(query)
+            if not keywords:
+                return []
+
+            # Use SupabaseHybridSearch with the actual vector_store if available
+            hybrid = SupabaseHybridSearch(
+                vector_store=self.vector_store,
+                supabase_client=self.vector_store.client if hasattr(self.vector_store, "client") else None,
+            )
+            return hybrid._keyword_search_fallback(query, filters, limit)
+        except Exception as e:
+            logger.error(f"Keyword search error: {e}")
+            return []
 
     def _has_advanced_operators(self, filters):
         if not isinstance(filters, dict):
@@ -696,7 +850,7 @@ class Memory(MemoryBase):
                 for cond in v:
                     processed.update(self._process_metadata_filters(cond))
             elif k in ("OR", "NOT"):
-                processed[f"${k.lower()}"] = [self._process_metadata_filters(c) for cond in v for c in cond.items()]
+                processed[f"${k.lower()}"] = [self._process_metadata_filters(cond) for cond in v]
             else:
                 processed.update(proc(k, v))
         return processed
@@ -706,22 +860,70 @@ class Memory(MemoryBase):
         if not existing:
             raise ValueError(f"Memory with ID {memory_id} not found.")
 
+        # Immutability gating: config-level OR per-memory flag
+        if self.config.enable_immutable_memories or existing.payload.get("immutable"):
+            raise Mem0ValidationError(
+                message=f"Memory {memory_id} is immutable and cannot be updated.",
+                error_code="IMMUTABLE_001",
+                details={"memory_id": memory_id},
+                suggestion="Create a new memory instead of updating an immutable one.",
+            )
+
         new_data = data if data is not None else existing.payload.get("data")
         emb = {new_data: self.embedding_model.embed(new_data, "update")}
         self._update_memory(memory_id, new_data, emb, metadata=metadata)
+        log_event(
+            EventType.MEMORY_UPDATE,
+            actor="system",
+            action="update_memory",
+            resource_type="memory",
+            resource_id=memory_id,
+            details={"data_length": len(new_data) if new_data else 0},
+        )
         return {"message": "Memory updated successfully!"}
 
     def delete(self, memory_id):
+        # Immutability gating: config-level OR per-memory flag
+        existing = self.vector_store.get(vector_id=memory_id)
+        if existing and (self.config.enable_immutable_memories or existing.payload.get("immutable")):
+            raise Mem0ValidationError(
+                message=f"Memory {memory_id} is immutable and cannot be deleted.",
+                error_code="IMMUTABLE_002",
+                details={"memory_id": memory_id},
+                suggestion="Immutable memories are protected from deletion.",
+            )
+
         self._delete_memory(memory_id)
+        log_event(
+            EventType.MEMORY_DELETE,
+            actor="system",
+            action="delete_memory",
+            resource_type="memory",
+            resource_id=memory_id,
+        )
         return {"message": "Memory deleted successfully!"}
 
     def delete_all(self, user_id=None, agent_id=None, run_id=None):
         f = {k: v for k, v in {"user_id": user_id, "agent_id": agent_id, "run_id": run_id}.items() if v}
         if not f:
             raise ValueError("Filter required.")
-        mems = self.vector_store.list(filters=f)[0]
+        mems = self.vector_store.list(filters=f)
+        # Normalize: handle both flat list and nested list returns
+        if isinstance(mems, (list, tuple)) and mems and isinstance(mems[0], (list, tuple)):
+            mems = mems[0]
         for m in mems:
+            # Immutability gating: skip immutable memories in bulk delete
+            if self.config.enable_immutable_memories or m.payload.get("immutable"):
+                logger.debug(f"Skipping immutable memory {m.id} in delete_all.")
+                continue
             self._delete_memory(m.id)
+        log_event(
+            EventType.MEMORY_DELETE,
+            actor="system",
+            action="delete_all_memories",
+            resource_type="memory",
+            details={"filters": f, "count": len(mems)},
+        )
         return {"message": "Deleted."}
 
     def history(self, memory_id):
@@ -756,8 +958,9 @@ class Memory(MemoryBase):
             {"role": "user", "content": "Summarize conversation."},
         ]
         proc = remove_code_blocks(self.llm.generate_response(messages=msgs))
-        metadata["memory_type"] = MemoryType.PROCEDURAL.value
-        mid = self._create_memory(proc, {proc: self.embedding_model.embed(proc, "add")}, metadata)
+        proc_meta = (metadata or {}).copy()
+        proc_meta["memory_type"] = MemoryType.PROCEDURAL.value
+        mid = self._create_memory(proc, {proc: self.embedding_model.embed(proc, "add")}, proc_meta)
         return {"results": [{"id": mid, "memory": proc, "event": "ADD"}]}
 
     def _update_memory(self, memory_id, data, existing_embeddings, metadata=None):

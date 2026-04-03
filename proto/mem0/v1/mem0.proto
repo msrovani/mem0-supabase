@@ -1,0 +1,197 @@
+syntax = "proto3";
+
+package mem0.v1;
+
+option go_package = "github.com/msrovani/mem0-supabase/proto/mem0/v1";
+
+// Mem0 gRPC Service
+service Mem0Service {
+  // Health check
+  rpc Health(HealthRequest) returns (HealthResponse);
+
+  // Memory CRUD
+  rpc AddMemory(AddMemoryRequest) returns (AddMemoryResponse);
+  rpc GetMemory(GetMemoryRequest) returns (GetMemoryResponse);
+  rpc SearchMemory(SearchMemoryRequest) returns (SearchMemoryResponse);
+  rpc ListMemories(ListMemoriesRequest) returns (ListMemoriesResponse);
+  rpc UpdateMemory(UpdateMemoryRequest) returns (UpdateMemoryResponse);
+  rpc DeleteMemory(DeleteMemoryRequest) returns (DeleteMemoryResponse);
+  rpc DeleteAllMemories(DeleteAllMemoriesRequest) returns (DeleteAllMemoriesResponse);
+  rpc ResetMemories(ResetMemoriesRequest) returns (ResetMemoriesResponse);
+
+  // Bulk operations
+  rpc BulkAddMemories(BulkAddMemoriesRequest) returns (BulkAddMemoriesResponse);
+
+  // Streaming
+  rpc StreamAddMemory(StreamAddMemoryRequest) returns (stream StreamAddMemoryResponse);
+}
+
+// --- Messages ---
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool ok = 1;
+  string status = 2;
+  string version = 3;
+  string vector_store = 4;
+  string llm = 5;
+  double uptime_seconds = 6;
+}
+
+message Message {
+  string role = 1;
+  string content = 2;
+  map<string, string> metadata = 3;
+}
+
+message AddMemoryRequest {
+  repeated Message messages = 1;
+  optional string user_id = 2;
+  optional string agent_id = 3;
+  optional string run_id = 4;
+  map<string, string> metadata = 5;
+  optional string idempotency_key = 6;
+  optional int64 ttl_seconds = 7;
+}
+
+message AddMemoryResponse {
+  repeated MemoryResult results = 1;
+
+  message MemoryResult {
+    string id = 1;
+    string memory = 2;
+    string event = 3;
+  }
+}
+
+message GetMemoryRequest {
+  string memory_id = 1;
+}
+
+message GetMemoryResponse {
+  string id = 1;
+  string memory = 2;
+  double score = 3;
+  map<string, string> metadata = 4;
+  string created_at = 5;
+}
+
+message SearchMemoryRequest {
+  string query = 1;
+  optional string user_id = 2;
+  optional string agent_id = 3;
+  optional string run_id = 4;
+  map<string, string> filters = 5;
+  int32 limit = 6;
+}
+
+message SearchMemoryResponse {
+  repeated MemoryItem results = 1;
+  repeated Association relations = 2;
+
+  message MemoryItem {
+    string id = 1;
+    string memory = 2;
+    double score = 3;
+    double recollection_score = 4;
+    map<string, string> metadata = 5;
+  }
+
+  message Association {
+    string source = 1;
+    string relation = 2;
+    string target = 3;
+  }
+}
+
+message ListMemoriesRequest {
+  optional string user_id = 1;
+  optional string agent_id = 2;
+  optional string run_id = 3;
+  optional string cursor = 4;
+  int32 limit = 5;
+}
+
+message ListMemoriesResponse {
+  repeated MemoryItem items = 1;
+  optional string next_cursor = 2;
+  int64 total_count = 3;
+
+  message MemoryItem {
+    string id = 1;
+    string memory = 2;
+    double score = 3;
+    string created_at = 4;
+    map<string, string> metadata = 5;
+  }
+}
+
+message UpdateMemoryRequest {
+  string memory_id = 1;
+  string data = 2;
+  map<string, string> metadata = 3;
+}
+
+message UpdateMemoryResponse {
+  string message = 1;
+}
+
+message DeleteMemoryRequest {
+  string memory_id = 1;
+}
+
+message DeleteMemoryResponse {
+  string message = 1;
+}
+
+message DeleteAllMemoriesRequest {
+  optional string user_id = 1;
+  optional string agent_id = 2;
+  optional string run_id = 3;
+}
+
+message DeleteAllMemoriesResponse {
+  string message = 1;
+}
+
+message ResetMemoriesRequest {}
+
+message ResetMemoriesResponse {
+  string message = 1;
+}
+
+message BulkAddMemoriesRequest {
+  repeated AddMemoryRequest items = 1;
+}
+
+message BulkAddMemoriesResponse {
+  int32 created = 1;
+  int32 errors = 2;
+  repeated BulkResult results = 3;
+  repeated BulkError error_details = 4;
+
+  message BulkResult {
+    int32 index = 1;
+    string status = 2;
+    AddMemoryResponse data = 3;
+  }
+
+  message BulkError {
+    int32 index = 1;
+    string error = 2;
+  }
+}
+
+message StreamAddMemoryRequest {
+  repeated Message messages = 1;
+  optional string user_id = 2;
+  optional string agent_id = 3;
+  optional string run_id = 4;
+}
+
+message StreamAddMemoryResponse {
+  string step = 1;
+  string message = 2;
+  optional AddMemoryResponse result = 3;
+}

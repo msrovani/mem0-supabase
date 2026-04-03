@@ -1,9 +1,47 @@
 import logging
 import pytz
-from typing import List, Dict, Any, Optional
+import re
+from typing import List, Dict, Any, Optional, FrozenSet, Tuple
 from datetime import datetime
 
+__all__ = ["RecollectionEngine"]
+
 logger = logging.getLogger(__name__)
+
+# Module-level constants (avoid recreating on every method call)
+_STOPWORDS: FrozenSet[str] = frozenset(
+    {
+        "the",
+        "and",
+        "of",
+        "in",
+        "to",
+        "from",
+        "with",
+        "on",
+        "at",
+        "by",
+        "for",
+        "a",
+        "an",
+        "as",
+        "is",
+        "it",
+        "this",
+        "that",
+        "these",
+        "those",
+    }
+)
+
+# Recency half-life in days (Ebbinghaus Forgetting Curve approximation)
+_RECENCY_HALFLIFE_DAYS: float = 30.0
+
+# Max entities to extract for graph jump
+_MAX_GRAPH_ENTITIES: int = 3
+
+# Max memories to analyze for entity extraction
+_MAX_MEMORIES_FOR_EXTRACTION: int = 2
 
 
 class RecollectionEngine:
@@ -29,6 +67,9 @@ class RecollectionEngine:
         self.w_similarity = 0.5
         self.w_importance = 0.3
         self.w_recency = 0.2
+        # Config: control whether to use LLM-based entity extraction for graph jumps
+        # Default is False to avoid extra costs unless explicitly enabled.
+        self.enable_llm_entity_extraction: bool = False
         self.logger = logging.getLogger(__name__)
 
     def recollect(
@@ -108,8 +149,8 @@ class RecollectionEngine:
                         created_at = pytz.utc.localize(created_at)
 
                     delta_days = (now - created_at).days
-                    # Half-life of 30 days for recency score (mimics Ebbinghaus Forgetting Curve)
-                    recency_score = 1.0 / (1.0 + (delta_days / 30.0))
+                    # Half-life decay (mimics Ebbinghaus Forgetting Curve)
+                    recency_score = 1.0 / (1.0 + (delta_days / _RECENCY_HALFLIFE_DAYS))
                 except (ValueError, TypeError) as e:
                     self.logger.warning(f"Failed to parse datetime for memory {item.get('id')}: {e}")
 
@@ -133,37 +174,53 @@ class RecollectionEngine:
         if enable_graph_jump and getattr(self.memory, "enable_graph", False) and final_memories:
             self.logger.debug("Executing associative graph jumps for the recalled entities")
 
-            # Perform graph jump on the top 2 memories to expand context
-            for mem in final_memories[:2]:
+            # Gather top memories for batch entity extraction and graph search
+            top_memories = final_memories[:_MAX_MEMORIES_FOR_EXTRACTION]
+            memory_texts: List[str] = [m.get("memory", "") for m in top_memories if m.get("memory", "")]
+            combined_text = " | ".join(memory_texts)
+
+            # 1) Fast path: regex-based entity extraction (no LLm required)
+            entities: List[str] = []
+            if combined_text:
+                entities = self._extract_entities_regex(combined_text)
+
+            # 2) Fall back to LLM-based extraction if configured and regex yielded insufficient entities
+            if self.enable_llm_entity_extraction and getattr(self.memory, "llm", None):
+                if len(entities) < 2:
+                    try:
+                        extraction_prompt = (
+                            "Extract the key entities (nouns, proper nouns, concepts) from the following texts. "
+                            "Return only the entities as a comma-separated list.\nTexts: "
+                            f"{combined_text}"
+                        )
+                        entities_text = self.memory.llm.generate_response(
+                            messages=[{"role": "user", "content": extraction_prompt}]
+                        )
+                        if entities_text:
+                            llm_entities = [e.strip() for e in entities_text.split(",") if e.strip()]
+                            for e in llm_entities:
+                                if e and e not in entities:
+                                    entities.append(e)
+                    except Exception as e:
+                        self.logger.warning(f"LLM entity extraction failed for graph jump: {e}")
+
+            # 3) Use up to N entities for graph search to expand context
+            search_queries = []
+            seen = set()
+            for ent in entities:
+                if ent not in seen and ent:
+                    seen.add(ent)
+                    search_queries.append(ent)
+                if len(search_queries) >= _MAX_GRAPH_ENTITIES:
+                    break
+
+            for query in search_queries:
                 try:
-                    mem_content = mem.get("memory", "")
-                    if mem_content:
-                        search_queries = [mem_content]
-
-                        # Optimization: Extract entities from memory content if LLM is available
-                        # This improves graph search quality significantly over raw text search
-                        if hasattr(self.memory, "llm") and self.memory.llm:
-                            try:
-                                extraction_prompt = f"Extract the key entities (nouns, proper nouns, concepts) from this text. Return only the entities comma separated.\nText: {mem_content}"
-                                entities_text = self.memory.llm.generate_response(
-                                    messages=[{"role": "user", "content": extraction_prompt}]
-                                )
-                                if entities_text:
-                                    # Split by comma and clean up
-                                    entities = [e.strip() for e in entities_text.split(",") if e.strip()]
-                                    if entities:
-                                        search_queries = entities[:3]  # Limit to top 3 entities to avoid explosion
-                                        self.logger.debug(f"extracted entities for graph jump: {search_queries}")
-                            except Exception as e:
-                                self.logger.warning(f"Failed to extract entities for graph jump: {e}")
-
-                        # Search graph for concepts/entities
-                        for query in search_queries:
-                            related = self.memory.graph.search(query)
-                            if related:
-                                associations.extend(related)
+                    related = self.memory.graph.search(query)
+                    if related:
+                        associations.extend(related)
                 except Exception as e:
-                    self.logger.warning(f"Associative jump failed for memory {mem.get('id')}: {e}")
+                    self.logger.warning(f"Associative jump failed for query '{query}': {e}")
 
         # Deduplicate associations based on (source, relation, target)
         unique_assoc = {}
@@ -180,3 +237,64 @@ class RecollectionEngine:
             "engine_version": "1.0.0",
             "weights": {"similarity": self.w_similarity, "importance": self.w_importance, "recency": self.w_recency},
         }
+
+    def _extract_entities_regex(self, text: str) -> List[str]:
+        """Extract potential entities from text using lightweight regex patterns.
+
+        This provides a fast, LLm-free fallback for graph expansion by detecting:
+        - Quoted strings
+        - Multi-word proper nouns (e.g., New York, OpenAI Intelligence)
+        - Single-word proper nouns
+        - Simple 2-3 word phrases excluding common stopwords
+
+        Args:
+            text: The input text to extract entities from.
+
+        Returns:
+            A list of unique entity strings, in the order they were discovered.
+        """
+        if not text:
+            return []
+
+        seen: set = set()
+        entities: List[str] = []
+
+        # 1) Quoted strings
+        for m in re.finditer(r'"([^"]+)"', text):
+            val = m.group(1).strip()
+            if val and val not in seen:
+                seen.add(val)
+                entities.append(val)
+        for m in re.finditer(r"'([^']+)'", text):
+            val = m.group(1).strip()
+            if val and val not in seen:
+                seen.add(val)
+                entities.append(val)
+
+        # 2) Multi-word proper nouns (capitalized words sequence)
+        for m in re.finditer(r"\b(?:[A-Z][a-z0-9]+(?:\s+[A-Z][a-z0-9]+)+)\b", text):
+            val = m.group(0).strip()
+            if val and val not in seen:
+                seen.add(val)
+                entities.append(val)
+
+        # 3) Single capitalized words (potential proper nouns)
+        for m in re.finditer(r"\b[A-Z][a-z0-9]+\b", text):
+            val = m.group(0).strip()
+            if val and val not in seen:
+                seen.add(val)
+                entities.append(val)
+
+        # 4) Simple 2-3 word phrases excluding stopwords
+        for m in re.finditer(r"\b([A-Za-z]+(?:\s+[A-Za-z]+){1,2})\b", text):
+            phrase = m.group(1).strip()
+            if not phrase:
+                continue
+            words = phrase.split()
+            if any(w.lower() in _STOPWORDS for w in words):
+                continue
+            if phrase not in seen:
+                seen.add(phrase)
+                entities.append(phrase)
+
+        return entities
